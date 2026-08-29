@@ -39,6 +39,7 @@ enum Haptics {
     static func zigzag() { guard enabled else { return }; select.selectionChanged(); light.impactOccurred() }
     static func mirror() { guard enabled else { return }; medium.impactOccurred() }
     static func shuffle() { guard enabled else { return }; heavy.impactOccurred(intensity: 0.5) }
+    static func ui() { guard enabled else { return }; select.selectionChanged(); light.impactOccurred(intensity: 0.45) }
     static func win() { guard enabled else { return }; notify.notificationOccurred(.success) }
     static func lose() { guard enabled else { return }; notify.notificationOccurred(.error) }
 }

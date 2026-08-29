@@ -16,6 +16,7 @@ final class ProfileManager: ObservableObject {
     @Published var bubbles = 180
     @Published var highestLevel = 1
     @Published var arcadeBest = 0
+    @Published var arcadeBestWave = 0
     @Published var arcadeWeek = ""
     @Published var streak = 0
     @Published var lastPlayDay = ""
@@ -32,6 +33,8 @@ final class ProfileManager: ObservableObject {
     @Published var dailyDone = false
     @Published var savedRun: Data?
     @Published var battleCode = ""
+    @Published var friendIds: [String] = []
+    @Published var pendingFriendIds: [String] = []
 
     private let key = "bubbleme.profile"
 
@@ -153,9 +156,12 @@ final class ProfileManager: ObservableObject {
         save()
     }
 
-    func recordArcade(score: Int) {
+    func recordArcade(score: Int, wave: Int = 1) {
         rotateArcadeIfNeeded()
-        if score > arcadeBest { arcadeBest = score }
+        if score > arcadeBest {
+            arcadeBest = score
+            arcadeBestWave = max(1, wave)
+        }
         save()
     }
 
@@ -167,8 +173,26 @@ final class ProfileManager: ObservableObject {
             }
             arcadeWeek = week
             arcadeBest = 0
+            arcadeBestWave = 0
             save()
         }
+    }
+
+    func boardStatus(for id: String) -> String {
+        if friendIds.contains(id) { return "friends" }
+        if pendingFriendIds.contains(id) { return "pending" }
+        return "none"
+    }
+
+    func addFromBoard(id: String, name: String) {
+        if friendIds.contains(id) { return }
+        pendingFriendIds.removeAll { $0 == id }
+        friendIds.append(id)
+        Haptics.ui()
+        if alertsEnabled {
+            NotificationManager.shared.friendRequest(from: name)
+        }
+        save()
     }
 
     func owns(shooter k: ShooterKind) -> Bool { ownedShooters.contains(k.rawValue) }
@@ -251,6 +275,7 @@ final class ProfileManager: ObservableObject {
         bubbles = decoded.bubbles > 0 ? decoded.bubbles : decoded.coins
         highestLevel = max(1, decoded.highestLevel)
         arcadeBest = decoded.arcadeBest
+        arcadeBestWave = decoded.arcadeBestWave ?? 0
         arcadeWeek = decoded.arcadeWeek
         streak = decoded.streak
         lastPlayDay = decoded.lastPlayDay
@@ -272,6 +297,8 @@ final class ProfileManager: ObservableObject {
         dailyDone = decoded.dailyDone
         savedRun = decoded.savedRun
         battleCode = decoded.battleCode
+        friendIds = decoded.friendIds ?? []
+        pendingFriendIds = decoded.pendingFriendIds ?? []
     }
 
     func save() {
@@ -290,6 +317,7 @@ final class ProfileManager: ObservableObject {
             bubbles: bubbles,
             highestLevel: highestLevel,
             arcadeBest: arcadeBest,
+            arcadeBestWave: arcadeBestWave,
             arcadeWeek: arcadeWeek,
             streak: streak,
             lastPlayDay: lastPlayDay,
@@ -305,7 +333,9 @@ final class ProfileManager: ObservableObject {
             lastDailyDay: lastDailyDay,
             dailyDone: dailyDone,
             savedRun: savedRun,
-            battleCode: battleCode
+            battleCode: battleCode,
+            friendIds: friendIds,
+            pendingFriendIds: pendingFriendIds
         )
         if let data = try? JSONEncoder().encode(save) {
             UserDefaults.standard.set(data, forKey: key)
@@ -328,6 +358,7 @@ final class ProfileManager: ObservableObject {
         var bubbles: Int = 0
         var highestLevel: Int = 1
         var arcadeBest: Int = 0
+        var arcadeBestWave: Int? = 0
         var arcadeWeek: String = ""
         var streak: Int = 0
         var lastPlayDay: String = ""
@@ -344,6 +375,8 @@ final class ProfileManager: ObservableObject {
         var dailyDone: Bool = false
         var savedRun: Data? = nil
         var battleCode: String = ""
+        var friendIds: [String]? = []
+        var pendingFriendIds: [String]? = []
 
         static func from(_ p: ProfileManager) -> Save {
             Save(
@@ -351,13 +384,14 @@ final class ProfileManager: ObservableObject {
                 music: p.musicEnabled, sfx: p.sfxEnabled, alerts: p.alertsEnabled,
                 inventory: p.inventory, photo: p.photo?.jpegData(compressionQuality: 0.72),
                 wins: p.wins, losses: p.losses, coins: p.bubbles, bubbles: p.bubbles,
-                highestLevel: p.highestLevel, arcadeBest: p.arcadeBest, arcadeWeek: p.arcadeWeek,
+                highestLevel: p.highestLevel, arcadeBest: p.arcadeBest, arcadeBestWave: p.arcadeBestWave, arcadeWeek: p.arcadeWeek,
                 streak: p.streak, lastPlayDay: p.lastPlayDay, shooter: p.shooter, palette: p.palette,
                 style: p.style, background: p.background,
                 ownedShooters: Array(p.ownedShooters), ownedPalettes: Array(p.ownedPalettes),
                 ownedStyles: Array(p.ownedStyles), ownedBackgrounds: Array(p.ownedBackgrounds),
                 stars: p.stars, lastDailyDay: p.lastDailyDay, dailyDone: p.dailyDone,
-                savedRun: p.savedRun, battleCode: p.battleCode
+                savedRun: p.savedRun, battleCode: p.battleCode,
+                friendIds: p.friendIds, pendingFriendIds: p.pendingFriendIds
             )
         }
     }

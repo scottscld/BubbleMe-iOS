@@ -76,7 +76,7 @@ struct ContentView: View {
             SettingsSheet(profile: profile)
         }
         .sheet(isPresented: $showBoard) {
-            ArcadeBoardSheet(best: profile.arcadeBest)
+            ArcadeBoardSheet(profile: profile, onPlay: startArcade)
         }
         .sheet(isPresented: $showCustomize) {
             CustomizeHub(profile: profile)
@@ -236,15 +236,19 @@ struct HomeHub: View {
                     .buttonStyle(PrimaryButton())
 
                     TimelineView(.periodic(from: .now, by: 1)) { context in
-                        HStack(spacing: 6) {
-                            Text("Resets in \(ArcadeWeek.formatCountdown(until: ArcadeWeek.nextReset(), now: context.date))")
-                            Text("·")
-                            Button("Leaderboard") { showBoard = true }
-                                .foregroundStyle(Palette.aqua)
-                        }
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Palette.muted)
+                        Text("Resets in \(ArcadeWeek.formatCountdown(until: ArcadeWeek.nextReset(), now: context.date))")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Palette.muted)
                     }
+
+                    HStack(spacing: 8) {
+                        homeStat("BEST", profile.arcadeBest > 0 ? "\(profile.arcadeBest)" : "0")
+                        homeStat("WAVE", profile.arcadeBestWave > 0 ? "\(profile.arcadeBestWave)" : "—")
+                        homeStat("RANK", WeeklyBoard.rank(player: profile.username, score: profile.arcadeBest, wave: profile.arcadeBestWave).map { "\($0)" } ?? "—")
+                    }
+
+                    Button("Leaderboard") { showBoard = true }
+                        .buttonStyle(SecondaryButton())
 
                     Button(action: onLevel) {
                         Text(profile.highestLevel > LevelsCatalog.count
@@ -277,6 +281,25 @@ struct HomeHub: View {
                 .padding(.bottom, 16)
             }
         }
+    }
+
+    private func homeStat(_ label: String, _ value: String) -> some View {
+        VStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .tracking(0.8)
+                .foregroundStyle(Palette.muted)
+            Text(value)
+                .font(.display(18, weight: .bold).monospacedDigit())
+                .foregroundStyle(Palette.fg)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(Palette.surface.opacity(0.9), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Palette.border, lineWidth: 1)
+        )
     }
 }
 
@@ -694,7 +717,7 @@ struct GameContainer: View {
     private func finish() {
         profile.inventory = session.scene.powers.inventory
         if request.mode == .arcade {
-            profile.recordArcade(score: session.score)
+            profile.recordArcade(score: session.score, wave: session.wave)
         } else if request.mode == .daily, session.won {
             profile.completeDaily()
             _ = profile.awardStars(max(1, session.earnedStars), level: 10_000 + DailyCatalog.index())
