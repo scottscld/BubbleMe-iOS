@@ -1,6 +1,6 @@
 import SpriteKit
 
-enum PlayMode { case arcade, level, battle }
+enum PlayMode: String { case arcade, level, battle, daily }
 
 /// Core match-3 bubble shooter. Aim, bounce, stick, pop, drop.
 final class GameScene: SKScene {
@@ -12,10 +12,33 @@ final class GameScene: SKScene {
     var onLose: (() -> Void)?
     var onWave: ((Int, Int) -> Void)?
     var onPickup: ((PowerUp) -> Void)?
+    var onStars: ((Int) -> Void)?
+    var onCpu: ((Int) -> Void)?
     var mode: PlayMode = .arcade
     var levelId = 1
     var seed: Int = 1
     var wave = 1
+    var objective: LevelGoal = .clear
+    var parShots = 14
+    var stars = 0
+    var cpuScore = 0
+    private var colorCleared = 0
+    private var popped = 0
+    private var maxCombo = 0
+    private var powersUsed = 0
+    private var targetColor: BubbleColor?
+    private var cpuBoard: Board?
+    private var lastCPU: TimeInterval = 0
+    private var incomingZigzag = 0
+    private var incomingMirror = 0
+    var pendingRestore: RunSnapshot?
+    var vsFriend = false
+    var cpuEnabled = true
+    var opponentName = "CPU"
+    var battleBanner: ((String) -> Void)?
+    private var cpuZigzag = 0
+    private var cpuMirror = 0
+    private var cpuPowers = (zigzag: 1, mirror: 1, shuffle: 1)
 
     private var shooter: SKNode!
     private var cannon: SKSpriteNode!
@@ -89,9 +112,28 @@ final class GameScene: SKScene {
         hint.zPosition = 12
         addChild(hint)
 
+        if mode == .level {
+            let info = LevelsCatalog.info(levelId)
+            objective = info.objective
+            shotsLeft = info.shotLimit
+            parShots = info.parShots
+        } else if mode == .daily {
+            let info = DailyCatalog.info()
+            objective = info.objective
+            shotsLeft = info.shotLimit
+            parShots = info.parShots
+        } else if mode == .arcade || mode == .battle {
+            shotsLeft = 9999
+        }
         seedBoard(wave: 1)
+        if mode == .battle, cpuEnabled, !vsFriend { bootCPU() }
+        if let snap = pendingRestore {
+            restore(snap)
+            pendingRestore = nil
+        }
         redrawBoard()
         onHud?(score, shotsLeft, dropIn)
+        AudioEngine.shared.start()
     }
 
     func seedBoard(wave: Int) {
@@ -99,7 +141,12 @@ final class GameScene: SKScene {
         board.clear()
         let colors = min(6, 4 + (wave - 1) / 2 + (mode == .level ? levelId / 80 : 0))
         let palette = Array(BubbleColor.allCases.prefix(max(3, colors)))
-        let rows = min(8, 5 + wave / 2 + (mode == .level ? (levelId / 100) : 0))
+        let catalogRows: Int = {
+            if mode == .daily { return DailyCatalog.info().rows }
+            if mode == .level { return LevelsCatalog.info(levelId).rows }
+            return min(8, 5 + wave / 2)
+        }()
+        let rows = catalogRows
         rng = RNG(seed: seed &+ wave &* 9973)
         for row in 0..<rows {
             for col in 0..<HexGrid.colCount(row) {
@@ -142,21 +189,30 @@ final class GameScene: SKScene {
         switch p {
         case .zigzag where powers.battle.zigzag > 0:
             powers.battle.zigzag -= 1
-            zigzagShots = 3
+            hurtCPU(.zigzag)
         case .mirror where powers.battle.mirror > 0:
             powers.battle.mirror -= 1
-            mirrorAim = true
+            hurtCPU(.mirror)
         case .shuffle where powers.battle.shuffle > 0:
             powers.battle.shuffle -= 1
-            for b in board.all() where b.pickup == nil {
-                let color = BubbleColor.allCases[Int(rng.next() % 6)]
-                _ = board.remove(col: b.col, row: b.row)
-                _ = board.spawn(col: b.col, row: b.row, color: color)
-            }
-            redrawBoard()
+            hurtCPU(.shuffle)
         default:
             break
         }
+        AudioEngine.shared.load()
+    }
+
+    private func hurtCPU(_ p: BattlePower) {
+        switch p {
+        case .shuffle:
+            guard let cpu = cpuBoard else { return }
+            cpu.shuffleColors(&rng)
+        case .zigzag:
+            cpuZigzag = 8
+        case .mirror:
+            cpuMirror = 6
+        }
+        battleBanner?(p.rawValue.uppercased() + " on opponent")
     }
 
     func setLoadedBadge(_ power: PowerUp?) {
@@ -255,6 +311,7 @@ final class GameScene: SKScene {
         var a = atan2(p.y - s.y, p.x - s.x)
         let minA = CGFloat(12) * .pi / 180
         a = min(max(a, minA), .pi - minA)
+        if incomingMirror > 0 { a = .pi - a }
         aimAngle = a
         if abs(a - lastAim) > 0.05 {
             Haptics.aimTick()
@@ -324,13 +381,27 @@ final class GameScene: SKScene {
 
     private func fire() {
         guard flying == nil, !pausedGame, !won, !lost else { return }
-        if mode != .arcade, shotsLeft <= 0 { return }
+        if mode != .arcade && mode != .battle, shotsLeft <= 0 { return }
+        if powers.loaded != nil, case .noPowers = objective {
+            powersUsed += 1
+            AudioEngine.shared.lose()
+            triggerLose()
+            return
+        }
         var shootAngle = aimAngle
+        if incomingZigzag > 0 {
+            shootAngle += CGFloat.random(in: -0.35...0.35)
+            incomingZigzag -= 1
+        }
+        if incomingMirror > 0 {
+            incomingMirror -= 1
+        }
         if mirrorAim {
             shootAngle = .pi - shootAngle
             mirrorAim = false
         }
         let power = powers.consume()
+        if power != nil { powersUsed += 1 }
         let node = makeBubbleSprite(color: currentColor, diameter: HexGrid.diameter, name: "shot")
         node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 26)
         node.zPosition = 9
@@ -344,7 +415,8 @@ final class GameScene: SKScene {
         addChild(node)
         flying = node
         if zigzagShots > 0 { zigzagShots -= 1 }
-        if mode != .arcade { shotsLeft -= 1 }
+        if mode != .arcade && mode != .battle { shotsLeft -= 1 }
+        AudioEngine.shared.shoot()
         Haptics.shoot()
         currentColor = nextColor
         nextColor = BubbleColor.allCases[Int(rng.next() % 6)]
@@ -360,6 +432,13 @@ final class GameScene: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
+        if mode == .battle, cpuEnabled, !pausedGame, !won, !lost, flying == nil {
+            if lastCPU == 0 { lastCPU = currentTime + 2.4 }
+            else if currentTime - lastCPU > 3.2 {
+                lastCPU = currentTime
+                cpuAct()
+            }
+        }
         guard let shot = flying else { return }
         let n = 8
         let wall = HexGrid.radius + 4
@@ -466,9 +545,10 @@ final class GameScene: SKScene {
             applyCeilingDrop()
         }
         onHud?(score, shotsLeft, dropIn)
-        if mode != .arcade, shotsLeft <= 0, !won, !lost {
+        if mode != .arcade && mode != .battle, shotsLeft <= 0, !won, !lost {
             triggerLose()
         }
+        checkObjective()
         checkLose()
     }
 
@@ -488,8 +568,14 @@ final class GameScene: SKScene {
         }
         let mul = mode == .arcade ? wave : 1
         score += rest.count * 10 * mul
+        popped += rest.count
+        maxCombo = max(maxCombo, rest.count)
+        if case .popColor(let c, _) = objective {
+            colorCleared += rest.filter { $0.color == c }.count
+        }
         burst(at: rest)
         for b in rest { _ = board.remove(col: b.col, row: b.row) }
+        AudioEngine.shared.pop()
         let dropped = board.floating()
         if !dropped.isEmpty {
             Haptics.drop()
@@ -500,7 +586,12 @@ final class GameScene: SKScene {
         redrawBoard()
         onHud?(score, shotsLeft, dropIn)
         if board.all().isEmpty {
-            if mode == .arcade {
+            let waveGoal: Bool = { if case .waves = objective { return true }; return false }()
+            if mode == .arcade || ((mode == .level || mode == .daily) && waveGoal) {
+                if (mode == .level || mode == .daily), case .waves(let need) = objective, wave >= need {
+                    triggerWin()
+                    return
+                }
                 wave += 1
                 seedBoard(wave: wave)
                 dropIn = max(3, 6 - wave)
@@ -509,13 +600,13 @@ final class GameScene: SKScene {
                 bubblesAward(8)
                 redrawBoard()
                 Haptics.win()
+                AudioEngine.shared.combo(wave)
                 onWave?(wave, score)
-            } else {
-                won = true
-                Haptics.win()
-                onWin?()
+            } else if mode != .arcade {
+                triggerWin()
             }
         }
+        checkObjective()
     }
 
     private func applyCeilingDrop() {
@@ -549,8 +640,208 @@ final class GameScene: SKScene {
         lost = true
         pausedGame = true
         Haptics.lose()
+        AudioEngine.shared.lose()
         onLose?()
     }
+
+    func applyOpponentPower(_ p: BattlePower) {
+        switch p {
+        case .zigzag: incomingZigzag = 8
+        case .mirror: incomingMirror = 6
+        case .shuffle:
+            board.shuffleColors(&rng)
+            redrawBoard()
+        }
+        Haptics.shuffle()
+        AudioEngine.shared.load()
+        battleBanner?(p.rawValue.uppercased() + " incoming")
+    }
+
+    func snapshot() -> RunSnapshot {
+        RunSnapshot(
+            mode: mode.rawValue, levelId: levelId, seed: seed, score: score,
+            shots: shotsLeft, wave: wave, dropIn: dropIn, dropIndex: dropIndex,
+            current: currentColor.rawValue, next: nextColor.rawValue, bubbles: board.all(),
+            bombs: powers.inventory.bombs, fire: powers.inventory.fireballs, face: powers.inventory.faceBalls,
+            zigzag: powers.battle.zigzag, mirror: powers.battle.mirror, shuffle: powers.battle.shuffle,
+            colorCleared: colorCleared, popped: popped, maxCombo: maxCombo, powersUsed: powersUsed,
+            targetColor: targetColor?.rawValue
+        )
+    }
+
+    func restore(_ s: RunSnapshot) {
+        score = s.score
+        shotsLeft = s.shots
+        wave = s.wave
+        dropIn = s.dropIn
+        dropIndex = s.dropIndex
+        currentColor = BubbleColor(rawValue: s.current) ?? .red
+        nextColor = BubbleColor(rawValue: s.next) ?? .amber
+        powers.inventory = Inventory(bombs: s.bombs, fireballs: s.fire, faceBalls: s.face)
+        powers.battle = (s.zigzag, s.mirror, s.shuffle)
+        colorCleared = s.colorCleared
+        popped = s.popped
+        maxCombo = s.maxCombo
+        powersUsed = s.powersUsed
+        board.clear()
+        for b in s.bubbles {
+            _ = board.spawn(col: b.col, row: b.row, color: b.color, face: b.face, pickup: b.pickup)
+        }
+        redrawBoard()
+        refreshCannonSkin()
+        if mode == .battle, cpuEnabled { bootCPU() }
+        onHud?(score, shotsLeft, dropIn)
+    }
+
+    private func checkObjective() {
+        guard !won, !lost, mode == .level || mode == .daily else { return }
+        var met = false
+        switch objective {
+        case .clear, .noPowers:
+            met = board.all().isEmpty
+        case .score(let n):
+            met = score >= n
+        case .popColor(_, let n):
+            met = colorCleared >= n
+        case .wipeColor(let c):
+            met = board.all().filter { $0.color == c }.isEmpty
+        case .waves(let n):
+            met = wave >= n && board.all().isEmpty
+        case .popCount(let n):
+            met = popped >= n
+        case .combo(let n):
+            met = maxCombo >= n
+        }
+        if met { triggerWin() }
+    }
+
+    private func triggerWin() {
+        guard !won, !lost else { return }
+        won = true
+        pausedGame = true
+        let used: Int
+        if mode == .level {
+            used = max(0, LevelsCatalog.info(levelId).shotLimit - shotsLeft)
+            let par = parShots
+            stars = used <= par - 4 ? 3 : used <= par ? 2 : 1
+            if case .noPowers = objective, powersUsed == 0 { stars = 3 }
+        } else if mode == .daily {
+            stars = score > 800 ? 3 : score > 400 ? 2 : 1
+        } else {
+            stars = 1
+        }
+        Haptics.win()
+        AudioEngine.shared.win()
+        onStars?(stars)
+        onWin?()
+    }
+
+    func bootCPU() {
+        cpuEnabled = true
+        let cpu = Board()
+        for b in board.all() {
+            _ = cpu.spawn(col: b.col, row: b.row, color: b.color, face: b.face)
+        }
+        cpuBoard = cpu
+        cpuPowers = (1, 1, 1)
+        cpuZigzag = 0
+        cpuMirror = 0
+        lastCPU = 0
+    }
+
+    func stopCPU() {
+        cpuEnabled = false
+    }
+
+    private func cpuAct() {
+        guard mode == .battle, cpuEnabled, let cpu = cpuBoard, !won, !lost else { return }
+        let all = cpu.all()
+        guard !all.isEmpty else {
+            cpuScore += 400
+            onCpu?(cpuScore)
+            triggerLose()
+            return
+        }
+
+        // Occasionally fire a battle power at the player (same loadout as bubbleme.fun).
+        if Int(rng.next() % 8) == 0 {
+            if cpuPowers.shuffle > 0 {
+                cpuPowers.shuffle -= 1
+                applyOpponentPower(.shuffle)
+                return
+            }
+            if cpuPowers.zigzag > 0 {
+                cpuPowers.zigzag -= 1
+                applyOpponentPower(.zigzag)
+                return
+            }
+            if cpuPowers.mirror > 0 {
+                cpuPowers.mirror -= 1
+                applyOpponentPower(.mirror)
+                return
+            }
+        }
+
+        var best: [GridBubble] = []
+        var seen = Set<Int>()
+        for b in all {
+            if seen.contains(b.id) { continue }
+            let cluster = cpu.cluster(fromCol: b.col, row: b.row)
+            for c in cluster { seen.insert(c.id) }
+            if cluster.count > best.count { best = cluster }
+        }
+
+        var miss = false
+        if cpuZigzag > 0 {
+            cpuZigzag -= 1
+            miss = Int(rng.next() % 2) == 0
+        }
+        if cpuMirror > 0 {
+            cpuMirror -= 1
+            miss = true
+        }
+
+        spawnCPUShotVisual(color: best.first?.color ?? all[0].color)
+
+        if !miss, best.count >= 3, Int(rng.next() % 3) == 0 {
+            for b in best { _ = cpu.remove(col: b.col, row: b.row) }
+            for b in cpu.floating() { _ = cpu.remove(col: b.col, row: b.row) }
+            cpuScore += best.count * 12
+            AudioEngine.shared.pop()
+        } else if let anchor = all.randomElement() {
+            var placed = false
+            for n in HexGrid.neighbors(col: anchor.col, row: anchor.row) {
+                if cpu.spawn(col: n.0, row: n.1, color: anchor.color) != nil {
+                    placed = true
+                    break
+                }
+            }
+            cpuScore += placed ? 4 : 2
+        }
+        onCpu?(cpuScore)
+        if cpu.all().isEmpty {
+            cpuScore += 500
+            onCpu?(cpuScore)
+            triggerLose()
+        }
+    }
+
+    private func spawnCPUShotVisual(color: BubbleColor) {
+        let n = makeBubbleSprite(color: color, diameter: 18, name: "cpuShot")
+        n.position = CGPoint(x: size.width - 28, y: size.height - 36)
+        n.zPosition = 22
+        addChild(n)
+        n.run(.sequence([
+            .group([
+                .move(to: CGPoint(x: size.width * 0.55, y: size.height * 0.55), duration: 0.32),
+                .scale(to: 1.3, duration: 0.32),
+            ]),
+            .fadeOut(withDuration: 0.14),
+            .removeFromParent(),
+        ]))
+        AudioEngine.shared.shoot()
+    }
+
 
     private func burst(at bubbles: [GridBubble]) {
         for b in bubbles.prefix(18) {

@@ -29,6 +29,13 @@
 		AA010000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000A /* Assets.xcassets */; };
 		AA010000000000000000000B /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000B /* SpriteKit.framework */; };
 		AA010000000000000000000C /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000C /* UserNotifications.framework */; };
+		AA010000000000000000001A /* AudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA020000000000000000001A /* AudioEngine.swift */; };
+		AA010000000000000000001B /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA020000000000000000001B /* CloudSync.swift */; };
+		AA010000000000000000001C /* DailyCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA020000000000000000001C /* DailyCatalog.swift */; };
+		AA010000000000000000001D /* FriendBattle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA020000000000000000001D /* FriendBattle.swift */; };
+		AA010000000000000000001E /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000001E /* GameKit.framework */; };
+		AA010000000000000000001F /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000001F /* AVFoundation.framework */; };
+		AA0100000000000000000020 /* MultipeerConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000020 /* MultipeerConnectivity.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +63,13 @@
 		AA020000000000000000000C /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		AA020000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA020000000000000000000E /* BubbleMe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BubbleMe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA020000000000000000001A /* AudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngine.swift; sourceTree = "<group>"; };
+		AA020000000000000000001B /* CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSync.swift; sourceTree = "<group>"; };
+		AA020000000000000000001C /* DailyCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyCatalog.swift; sourceTree = "<group>"; };
+		AA020000000000000000001D /* FriendBattle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendBattle.swift; sourceTree = "<group>"; };
+		AA020000000000000000001E /* GameKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameKit.framework; path = System/Library/Frameworks/GameKit.framework; sourceTree = SDKROOT; };
+		AA020000000000000000001F /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		AA0200000000000000000020 /* MultipeerConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MultipeerConnectivity.framework; path = System/Library/Frameworks/MultipeerConnectivity.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +80,9 @@
 				AA010000000000000000000B /* SpriteKit.framework in Frameworks */,
 				AA010000000000000000000C /* UserNotifications.framework in Frameworks */,
 				AA0100000000000000000019 /* StoreKit.framework in Frameworks */,
+				AA010000000000000000001E /* GameKit.framework in Frameworks */,
+				AA010000000000000000001F /* AVFoundation.framework in Frameworks */,
+				AA0100000000000000000020 /* MultipeerConnectivity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +119,10 @@
 				AA0200000000000000000016 /* ShopStore.swift */,
 				AA0200000000000000000017 /* NotificationManager.swift */,
 				AA0200000000000000000018 /* CustomizeHub.swift */,
+				AA020000000000000000001A /* AudioEngine.swift */,
+				AA020000000000000000001B /* CloudSync.swift */,
+				AA020000000000000000001C /* DailyCatalog.swift */,
+				AA020000000000000000001D /* FriendBattle.swift */,
 				AA020000000000000000000A /* Assets.xcassets */,
 				AA020000000000000000000D /* Info.plist */,
 			);
@@ -114,6 +135,9 @@
 				AA020000000000000000000B /* SpriteKit.framework */,
 				AA020000000000000000000C /* UserNotifications.framework */,
 				AA0200000000000000000019 /* StoreKit.framework */,
+				AA020000000000000000001E /* GameKit.framework */,
+				AA020000000000000000001F /* AVFoundation.framework */,
+				AA0200000000000000000020 /* MultipeerConnectivity.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -213,6 +237,10 @@
 				AA0100000000000000000016 /* ShopStore.swift in Sources */,
 				AA0100000000000000000017 /* NotificationManager.swift in Sources */,
 				AA0100000000000000000018 /* CustomizeHub.swift in Sources */,
+				AA010000000000000000001A /* AudioEngine.swift in Sources */,
+				AA010000000000000000001B /* CloudSync.swift in Sources */,
+				AA010000000000000000001C /* DailyCatalog.swift in Sources */,
+				AA010000000000000000001D /* FriendBattle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

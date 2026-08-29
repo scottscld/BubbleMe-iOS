@@ -10,6 +10,9 @@ struct PlayRequest {
     var mode: PlayMode
     var levelId: Int
     var seed: Int
+    var resume: Bool = false
+    var roomCode: String = ""
+    var hosting: Bool = false
 }
 
 struct ContentView: View {
@@ -20,6 +23,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showBoard = false
     @State private var showCustomize = false
+    @ObservedObject private var cloud = CloudSync.shared
 
     var body: some View {
         ZStack {
@@ -40,12 +44,14 @@ struct ContentView: View {
                                 showBoard: $showBoard,
                                 showCustomize: $showCustomize,
                                 onArcade: startArcade,
-                                onLevel: { startLevel(profile.highestLevel) }
+                                onLevel: { startLevel(profile.highestLevel) },
+                                onDaily: startDaily,
+                                onContinue: continueRun
                             )
                         case .levels:
                             LevelsHub(profile: profile, onPlay: startLevel)
                         case .battle:
-                            BattleHub(onCPU: startCPU)
+                            BattleHub(profile: profile, onCPU: startCPU, onFriend: startFriend)
                         case .friends:
                             FriendsHub(code: profile.friendCode)
                         case .me:
@@ -75,7 +81,16 @@ struct ContentView: View {
         .sheet(isPresented: $showCustomize) {
             CustomizeHub(profile: profile)
         }
-        .onAppear { profile.notePlay() }
+        .onAppear {
+            AudioEngine.shared.start()
+            AudioEngine.shared.musicOn = profile.musicEnabled
+            AudioEngine.shared.sfxOn = profile.sfxEnabled
+            CloudSync.shared.authenticate()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .bubbleMeCloud)) { note in
+            if let data = note.object as? Data { profile.mergeCloud(data) }
+        }
+        .background(CloudAuthHost())
     }
 
     private func startArcade() {
@@ -88,7 +103,48 @@ struct ContentView: View {
     }
 
     private func startCPU() {
-        play = PlayRequest(mode: .battle, levelId: 6, seed: 6 * 997 + 13)
+        play = PlayRequest(mode: .battle, levelId: 6, seed: Int.random(in: 1...999_999))
+    }
+
+    private func startFriend(code: String, hosting: Bool) {
+        let trimmed = code.uppercased().filter { $0.isLetter || $0.isNumber }
+        guard trimmed.count >= 4 else { return }
+        play = PlayRequest(
+            mode: .battle,
+            levelId: 6,
+            seed: RoomCode.seed(trimmed),
+            roomCode: String(trimmed.prefix(4)),
+            hosting: hosting
+        )
+    }
+
+    private func startDaily() {
+        let info = DailyCatalog.info()
+        play = PlayRequest(mode: .daily, levelId: info.id, seed: info.seed)
+    }
+
+    private func continueRun() {
+        guard let data = profile.savedRun,
+              let snap = try? JSONDecoder().decode(RunSnapshot.self, from: data) else { return }
+        let mode = PlayMode(rawValue: snap.mode) ?? .arcade
+        play = PlayRequest(mode: mode, levelId: snap.levelId, seed: snap.seed, resume: true)
+    }
+}
+
+private struct CloudAuthHost: UIViewControllerRepresentable {
+    @ObservedObject var cloud = CloudSync.shared
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let vc = UIViewController()
+        vc.view.backgroundColor = .clear
+        vc.view.isUserInteractionEnabled = false
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        if let auth = cloud.authVC, uiViewController.presentedViewController == nil {
+            uiViewController.present(auth, animated: true)
+        }
     }
 }
 
@@ -100,6 +156,24 @@ struct HomeHub: View {
     @Binding var showCustomize: Bool
     var onArcade: () -> Void
     var onLevel: () -> Void
+    var onDaily: () -> Void
+    var onContinue: () -> Void
+    @ObservedObject private var cloud = CloudSync.shared
+
+    private var cloudName: String {
+        cloud.signedIn ? cloud.playerName : (profile.username.isEmpty ? "Guest" : profile.username)
+    }
+
+    private var streakCopy: String {
+        let today = ArcadeWeek.dayId()
+        if profile.lastPlayDay == today, profile.streak > 0 {
+            return "Streak \(profile.streak) days · you’re good for today"
+        }
+        if profile.streak > 0 {
+            return "Play today to keep your \(profile.streak)-day streak"
+        }
+        return "Play today to start a streak"
+    }
 
     var body: some View {
         ZStack {
@@ -152,6 +226,10 @@ struct HomeHub: View {
                 Spacer()
 
                 VStack(spacing: 12) {
+                    if profile.savedRun != nil {
+                        Button("Continue", action: onContinue)
+                            .buttonStyle(PrimaryButton())
+                    }
                     Button(action: onArcade) {
                         Text("Play Arcade")
                     }
@@ -175,10 +253,22 @@ struct HomeHub: View {
                     }
                     .buttonStyle(SecondaryButton())
 
+                    Button(action: onDaily) {
+                        Text(profile.dailyDone ? "Replay Daily Board" : "Play today’s Daily Board")
+                    }
+                    .buttonStyle(SecondaryButton())
+                    Text("\(DailyCatalog.info().name) · \(DailyCatalog.info().goal)")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+
                     Button("Customize shooter") { showCustomize = true }
                         .buttonStyle(SecondaryButton())
 
-                    Text("\(profile.username.isEmpty ? "Guest" : profile.username) · \(profile.wins)W \(profile.losses)L · \(profile.bubbles) Bubbles")
+                    Text(streakCopy)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.aqua)
+
+                    Text("\(cloudName) · \(profile.wins)W \(profile.losses)L · \(profile.bubbles) Bubbles")
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(Palette.muted)
                         .padding(.top, 2)
@@ -310,7 +400,13 @@ struct GameContainer: View {
                 HStack {
                     chip("\(session.score)", label: "Score")
                     Spacer()
-                    Button("Home", action: finish)
+                    Button("Pause") { session.paused = true; session.scene.isPaused = true; session.persist() }
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.fg)
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                        .background(Palette.surface.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    Button("Home") { session.persist(); finish() }
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(Palette.fg)
                         .padding(.horizontal, 12)
@@ -319,6 +415,8 @@ struct GameContainer: View {
                     Spacer()
                     if request.mode == .arcade {
                         chip("\(session.wave)", label: "Wave")
+                    } else if request.mode == .battle {
+                        chip("\(session.cpuScore)", label: session.oppLabel)
                     } else {
                         chip("\(session.shots)", label: "Shots")
                     }
@@ -328,6 +426,16 @@ struct GameContainer: View {
 
                 if request.mode == .arcade {
                     Text("Play for high score · waves get harder")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                } else if request.mode == .daily {
+                    Text(DailyCatalog.info().goal)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                } else if request.mode == .battle {
+                    Text(request.roomCode.isEmpty
+                         ? "Duel · first to clear — or highest score — wins"
+                         : "Room \(request.roomCode) · ZigZag / Mirror / Shuffle hit them")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(Palette.muted)
                 } else {
@@ -352,12 +460,14 @@ struct GameContainer: View {
                             }
                         }
                         .padding(.horizontal, 16)
-                        HStack(spacing: 10) {
-                            BattleChip(title: "ZigZag", icon: "〰️", count: session.zigzag) { session.useBattle(.zigzag) }
-                            BattleChip(title: "Mirror", icon: "🪞", count: session.mirror) { session.useBattle(.mirror) }
-                            BattleChip(title: "Shuffle", icon: "🔀", count: session.shuffle) { session.useBattle(.shuffle) }
+                        if request.mode == .battle {
+                            HStack(spacing: 10) {
+                                BattleChip(title: "ZigZag", icon: "〰️", count: session.zigzag) { session.useBattle(.zigzag) }
+                                BattleChip(title: "Mirror", icon: "🪞", count: session.mirror) { session.useBattle(.mirror) }
+                                BattleChip(title: "Shuffle", icon: "🔀", count: session.shuffle) { session.useBattle(.shuffle) }
+                            }
+                            .padding(.horizontal, 16)
                         }
-                        .padding(.horizontal, 16)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .always))
                     .frame(height: 96)
@@ -412,12 +522,99 @@ struct GameContainer: View {
                 .padding(28)
             }
 
+            if session.paused && !session.lost && !session.won && session.waveBanner == nil {
+                Color.black.opacity(0.55).ignoresSafeArea()
+                VStack(spacing: 12) {
+                    Text("Paused").font(.display(32, weight: .bold))
+                    Text("Progress is saved. Head home, battle, or quit — Continue on Home brings you back.")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                        .multilineTextAlignment(.center)
+                    Button("Resume") {
+                        session.paused = false
+                        session.scene.isPaused = false
+                    }
+                    .buttonStyle(PrimaryButton())
+                    Button("Save & Home") { session.persist(); finish() }
+                        .buttonStyle(SecondaryButton())
+                }
+                .padding(24)
+                .foregroundStyle(Palette.fg)
+            }
+
+            if let msg = session.banner, !session.lost, !session.won {
+                Text(msg)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Palette.accent.opacity(0.92), in: Capsule())
+                    .foregroundStyle(.white)
+                    .padding(.top, 88)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .allowsHitTesting(false)
+            }
+
+            if session.waiting {
+                Color.black.opacity(0.55).ignoresSafeArea()
+                VStack(spacing: 12) {
+                    Text("Room \(request.roomCode)")
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Palette.aqua)
+                    Text("Waiting for a friend nearby")
+                        .font(.display(26, weight: .bold))
+                    Text(session.link?.status ?? "Share this code. They join on the Battle tab.")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                        .multilineTextAlignment(.center)
+                    ShareLink(item: "Battle me in Bubble Me — room \(request.roomCode)") {
+                        Text("Share code").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButton())
+                    Button("Play a stand-in") { session.startStandIn() }
+                        .buttonStyle(SecondaryButton())
+                    Button("Cancel") { session.link?.stop(); finish() }
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                }
+                .padding(24)
+                .foregroundStyle(Palette.fg)
+            }
+
+            if session.won {
+                Color.black.opacity(0.55).ignoresSafeArea()
+                VStack(spacing: 12) {
+                    Text("Cleared").font(.display(32, weight: .bold))
+                    if request.mode == .level || request.mode == .daily {
+                        HStack(spacing: 6) {
+                            ForEach(1...3, id: \.self) { i in
+                                Image(systemName: i <= session.earnedStars ? "star.fill" : "star")
+                                    .foregroundStyle(i <= session.earnedStars ? Palette.accent : Palette.muted)
+                            }
+                        }
+                        .font(.system(size: 28))
+                        Text(session.earnedStars == 3 ? "+75 Bubbles" : session.earnedStars == 2 ? "+50 Bubbles" : "+25 Bubbles")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Palette.aqua)
+                    }
+                    Text("\(session.score)")
+                        .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Palette.accent)
+                    Button("Home") { finish() }
+                        .buttonStyle(PrimaryButton())
+                        .padding(.horizontal, 40)
+                }
+                .padding(24)
+                .foregroundStyle(Palette.fg)
+            }
+
             if session.lost {
                 Color.black.opacity(0.55).ignoresSafeArea()
                 VStack(spacing: 14) {
-                    Text("Board full")
+                    Text(request.mode == .battle ? "They cleared first" : "Board full")
                         .font(.display(28, weight: .bold))
-                    Text("The bubbles reached the line.")
+                    Text(request.mode == .battle
+                         ? "First to clear — or highest score — wins."
+                         : "The bubbles reached the line.")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(Palette.muted)
                     Text("\(session.score)")
@@ -428,7 +625,7 @@ struct GameContainer: View {
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(Palette.muted)
                     }
-                    Button("Home", action: finish)
+                    Button("Home") { finish() }
                         .buttonStyle(PrimaryButton())
                         .padding(.horizontal, 40)
                 }
@@ -437,12 +634,16 @@ struct GameContainer: View {
             }
         }
         .statusBarHidden(true)
-        .onChange(of: session.won) { _, won in
-            if won { finish() }
+        .onAppear {
+            if session.waiting { session.scene.isPaused = true }
+        }
+        .onChange(of: session.waiting) { _, wait in
+            if wait { session.scene.isPaused = true }
         }
         .onChange(of: session.waveBanner) { _, banner in
             session.scene.isPaused = banner != nil
         }
+        .onDisappear { session.link?.stop() }
     }
 
     private func waveCopy(_ w: Int) -> String {
@@ -492,17 +693,24 @@ struct GameContainer: View {
 
     private func finish() {
         profile.inventory = session.scene.powers.inventory
-        profile.save()
         if request.mode == .arcade {
             profile.recordArcade(score: session.score)
-        } else if session.won {
+        } else if request.mode == .daily, session.won {
+            profile.completeDaily()
+            _ = profile.awardStars(max(1, session.earnedStars), level: 10_000 + DailyCatalog.index())
+        } else if request.mode == .level, session.won {
             profile.clearLevel(request.levelId)
+            _ = profile.awardStars(max(1, session.earnedStars), level: request.levelId)
             profile.wins += 1
-            profile.save()
+        } else if request.mode == .battle, session.won {
+            profile.wins += 1
+            profile.addBubbles(40)
         } else if session.lost {
             profile.losses += 1
-            profile.save()
         }
+        if session.won || session.lost { session.clearSave() }
+        session.link?.stop()
+        profile.save()
         onHome()
     }
 }
@@ -596,21 +804,38 @@ final class GameSession: ObservableObject {
     @Published var zigzag = 1
     @Published var mirror = 1
     @Published var shuffle = 1
+    @Published var paused = false
+    @Published var cpuScore = 0
+    @Published var earnedStars = 0
+    @Published var waiting = false
+    @Published var banner: String?
+    @Published var oppLabel = "CPU"
+    let profile: ProfileManager
+    let request: PlayRequest
+    private(set) var link: FriendBattleLink?
 
     init(profile: ProfileManager, request: PlayRequest) {
-        bombs = profile.inventory.bombs
-        fire = profile.inventory.fireballs
-        face = profile.inventory.faceBalls
+        self.profile = profile
+        self.request = request
+        let inv = (request.mode == .arcade || request.mode == .daily)
+            ? Inventory(bombs: 2, fireballs: 2, faceBalls: 1)
+            : profile.inventory
+        bombs = inv.bombs
+        fire = inv.fireballs
+        face = inv.faceBalls
         let size = UIScreen.main.bounds.size
         let scene = GameScene(
             size: size,
-            inventory: profile.inventory,
+            inventory: inv,
             seed: request.seed,
             mode: request.mode,
             levelId: request.levelId
         )
         scene.scaleMode = .resizeFill
         scene.profile = profile
+        scene.vsFriend = !request.roomCode.isEmpty
+        scene.cpuEnabled = request.roomCode.isEmpty
+        scene.opponentName = request.roomCode.isEmpty ? "CPU" : request.roomCode
         self.scene = scene
         scene.onHud = { [weak self] score, shots, _ in
             DispatchQueue.main.async {
@@ -623,10 +848,14 @@ final class GameSession: ObservableObject {
                 self.fire = inv.fireballs
                 self.face = inv.faceBalls
                 self.loaded = self.scene.powers.loaded
+                self.link?.sendScore(score, over: nil)
             }
         }
         scene.onWin = { [weak self] in
-            DispatchQueue.main.async { self?.won = true }
+            DispatchQueue.main.async {
+                self?.link?.sendScore(self?.score ?? 0, over: "win")
+                self?.won = true
+            }
         }
         scene.onLose = { [weak self] in
             DispatchQueue.main.async { self?.lost = true }
@@ -647,12 +876,88 @@ final class GameSession: ObservableObject {
                 self.face = inv.faceBalls
             }
         }
+        scene.onStars = { [weak self] n in
+            DispatchQueue.main.async { self?.earnedStars = n }
+        }
+        scene.onCpu = { [weak self] n in
+            DispatchQueue.main.async { self?.cpuScore = n }
+        }
+        scene.battleBanner = { [weak self] msg in
+            DispatchQueue.main.async {
+                self?.banner = msg
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                    if self?.banner == msg { self?.banner = nil }
+                }
+            }
+        }
+        if request.resume, let data = profile.savedRun,
+           let snap = try? JSONDecoder().decode(RunSnapshot.self, from: data) {
+            scene.pendingRestore = snap
+        }
+        if request.mode == .battle, !request.roomCode.isEmpty, !request.resume {
+            waiting = true
+            scene.cpuEnabled = false
+            let link = FriendBattleLink(
+                code: request.roomCode,
+                hosting: request.hosting,
+                name: profile.username.isEmpty ? "Player" : profile.username
+            )
+            self.link = link
+            oppLabel = request.roomCode
+            link.onPower = { [weak scene] p in scene?.applyOpponentPower(p) }
+            link.onScore = { [weak self] n in
+                DispatchQueue.main.async { self?.cpuScore = n }
+            }
+            link.onOpponentWin = { [weak self] in
+                DispatchQueue.main.async { self?.lost = true }
+            }
+            link.onDropped = { [weak self] in
+                DispatchQueue.main.async { self?.startStandIn() }
+            }
+            link.onConnected = { [weak self] in
+                guard let self else { return }
+                self.waiting = false
+                self.scene.isPaused = false
+                self.scene.stopCPU()
+                self.oppLabel = self.link?.opponentName ?? "Friend"
+            }
+            link.start()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
+                guard let self, self.waiting else { return }
+                self.startStandIn()
+            }
+        }
         profile.notePlay()
+    }
+
+    func startStandIn() {
+        waiting = false
+        oppLabel = "Stand-in"
+        scene.vsFriend = false
+        scene.bootCPU()
+        scene.isPaused = false
+        banner = "Stand-in joined"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
+            if self?.banner == "Stand-in joined" { self?.banner = nil }
+        }
+    }
+
+    func persist() {
+        if let data = try? JSONEncoder().encode(scene.snapshot()) {
+            profile.savedRun = data
+            profile.save()
+        }
+    }
+
+    func clearSave() {
+        profile.savedRun = nil
+        profile.save()
     }
 
     func load(_ power: PowerUp) {
         scene.loadPower(power)
         loaded = scene.powers.loaded
+        AudioEngine.shared.load()
         Haptics.aimTick()
     }
 
@@ -661,6 +966,7 @@ final class GameSession: ObservableObject {
         zigzag = scene.powers.battle.zigzag
         mirror = scene.powers.battle.mirror
         shuffle = scene.powers.battle.shuffle
+        link?.sendPower(p)
         Haptics.aimTick()
     }
 }

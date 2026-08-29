@@ -27,6 +27,11 @@ final class ProfileManager: ObservableObject {
     @Published var ownedPalettes: Set<String> = [ColorPack.classic.rawValue]
     @Published var ownedStyles: Set<String> = [BubbleStyle.solid.rawValue]
     @Published var ownedBackgrounds: Set<String> = [PlayBackground.twilight.rawValue]
+    @Published var stars: [String: Int] = [:]
+    @Published var lastDailyDay = ""
+    @Published var dailyDone = false
+    @Published var savedRun: Data?
+    @Published var battleCode = ""
 
     private let key = "bubbleme.profile"
 
@@ -34,7 +39,10 @@ final class ProfileManager: ObservableObject {
         load()
         if friendCode.isEmpty { friendCode = Self.makeCode() }
         Haptics.enabled = hapticEnabled
+        AudioEngine.shared.musicOn = musicEnabled
+        AudioEngine.shared.sfxOn = sfxEnabled
         rotateArcadeIfNeeded()
+        rotateDailyIfNeeded()
         if alertsEnabled {
             NotificationManager.shared.request()
             NotificationManager.shared.streakWarning(streak: max(1, streak))
@@ -44,6 +52,60 @@ final class ProfileManager: ObservableObject {
     func setHaptic(_ on: Bool) {
         hapticEnabled = on
         Haptics.enabled = on
+        save()
+    }
+
+    func setMusic(_ on: Bool) {
+        musicEnabled = on
+        AudioEngine.shared.musicOn = on
+        save()
+    }
+
+    func setSfx(_ on: Bool) {
+        sfxEnabled = on
+        AudioEngine.shared.sfxOn = on
+        save()
+    }
+
+    func rotateDailyIfNeeded() {
+        let day = ArcadeWeek.dayId()
+        if lastDailyDay != day {
+            lastDailyDay = day
+            dailyDone = false
+            save()
+        }
+    }
+
+    func completeDaily() {
+        dailyDone = true
+        save()
+    }
+
+    func stars(for level: Int) -> Int { stars[String(level)] ?? 0 }
+
+    @discardableResult
+    func awardStars(_ earned: Int, level: Int) -> Int {
+        let prev = stars(for: level)
+        guard earned > prev else { return 0 }
+        let table = [0, 25, 50, 75]
+        let gain = table[min(3, earned)] - table[min(3, prev)]
+        bubbles += gain
+        stars[String(level)] = earned
+        save()
+        return gain
+    }
+
+    func cloudBlob() -> Data? {
+        try? JSONEncoder().encode(Save.from(self))
+    }
+
+    func mergeCloud(_ data: Data) {
+        guard let decoded = try? JSONDecoder().decode(Save.self, from: data) else { return }
+        bubbles = max(bubbles, decoded.bubbles)
+        highestLevel = max(highestLevel, decoded.highestLevel)
+        wins = max(wins, decoded.wins)
+        arcadeBest = max(arcadeBest, decoded.arcadeBest)
+        for (k, v) in decoded.stars { stars[k] = max(stars[k] ?? 0, v) }
         save()
     }
 
@@ -88,7 +150,6 @@ final class ProfileManager: ObservableObject {
 
     func clearLevel(_ id: Int) {
         if id >= highestLevel { highestLevel = min(LevelsCatalog.count, id + 1) }
-        bubbles += 12
         save()
     }
 
@@ -206,6 +267,11 @@ final class ProfileManager: ObservableObject {
         if ownedStyles.isEmpty { ownedStyles = [BubbleStyle.solid.rawValue] }
         if ownedBackgrounds.isEmpty { ownedBackgrounds = [PlayBackground.twilight.rawValue] }
         if let jpeg = decoded.photo, let img = UIImage(data: jpeg) { photo = img }
+        stars = decoded.stars
+        lastDailyDay = decoded.lastDailyDay
+        dailyDone = decoded.dailyDone
+        savedRun = decoded.savedRun
+        battleCode = decoded.battleCode
     }
 
     func save() {
@@ -234,11 +300,17 @@ final class ProfileManager: ObservableObject {
             ownedShooters: Array(ownedShooters),
             ownedPalettes: Array(ownedPalettes),
             ownedStyles: Array(ownedStyles),
-            ownedBackgrounds: Array(ownedBackgrounds)
+            ownedBackgrounds: Array(ownedBackgrounds),
+            stars: stars,
+            lastDailyDay: lastDailyDay,
+            dailyDone: dailyDone,
+            savedRun: savedRun,
+            battleCode: battleCode
         )
         if let data = try? JSONEncoder().encode(save) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        CloudSync.shared.push(profile: self)
     }
 
     private struct Save: Codable {
@@ -267,5 +339,26 @@ final class ProfileManager: ObservableObject {
         var ownedPalettes: [String] = [ColorPack.classic.rawValue]
         var ownedStyles: [String] = [BubbleStyle.solid.rawValue]
         var ownedBackgrounds: [String] = [PlayBackground.twilight.rawValue]
+        var stars: [String: Int] = [:]
+        var lastDailyDay: String = ""
+        var dailyDone: Bool = false
+        var savedRun: Data? = nil
+        var battleCode: String = ""
+
+        static func from(_ p: ProfileManager) -> Save {
+            Save(
+                username: p.username, friendCode: p.friendCode, haptic: p.hapticEnabled,
+                music: p.musicEnabled, sfx: p.sfxEnabled, alerts: p.alertsEnabled,
+                inventory: p.inventory, photo: p.photo?.jpegData(compressionQuality: 0.72),
+                wins: p.wins, losses: p.losses, coins: p.bubbles, bubbles: p.bubbles,
+                highestLevel: p.highestLevel, arcadeBest: p.arcadeBest, arcadeWeek: p.arcadeWeek,
+                streak: p.streak, lastPlayDay: p.lastPlayDay, shooter: p.shooter, palette: p.palette,
+                style: p.style, background: p.background,
+                ownedShooters: Array(p.ownedShooters), ownedPalettes: Array(p.ownedPalettes),
+                ownedStyles: Array(p.ownedStyles), ownedBackgrounds: Array(p.ownedBackgrounds),
+                stars: p.stars, lastDailyDay: p.lastDailyDay, dailyDone: p.dailyDone,
+                savedRun: p.savedRun, battleCode: p.battleCode
+            )
+        }
     }
 }

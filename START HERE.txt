@@ -13,8 +13,8 @@ You need:
 STEP 1 — Unzip
 --------------
 If this is still a .zip file:
-  1. Double-click BubbleMe-Xcode.zip
-  2. A folder named BubbleMe-Xcode appears
+  1. Double-click the zip
+  2. A folder appears (BubbleMe-Xcode or BubbleMe-iOS-main)
   3. Open that folder
 
 
@@ -46,16 +46,17 @@ Click the triangle Play button at the top left
 (or press the Command key and the R key together).
 
 The first time takes 1–3 minutes. A fake iPhone window (the Simulator)
-will open. Tap Play in the app, then drag to aim and release to shoot.
+will open. Tap Play Arcade, then drag to aim and release to shoot.
 
 
 THAT’S IT
 ---------
 You should see:
-  • Home screen with your photo circle, Play, Friends, and haptic toggle
-  • A bubble board you can shoot
-  • Bomb / Fire / Face power-ups at the bottom
-  • Friends sheet with Messages, Email, and More
+  • Home — Arcade, today’s Daily Board (1 of 90), Continue, streak
+  • Levels — 500 stages with 1–3 stars (25 / 50 / 75 Bubbles)
+  • Battle — CPU that shoots back, or a 4-letter friend room
+  • Bomb / Fire / Face in the bag. Battle also has ZigZag / Mirror / Shuffle
+  • Pause saves. Continue on Home resumes. Music + SFX in Settings
 
 
 IF XCODE ASKS ABOUT A TEAM (signing)
@@ -79,16 +80,39 @@ TO RUN ON YOUR REAL IPHONE
 5. On the iPhone go to Settings → General → VPN & Device Management
    and trust your Apple ID
 
+A free Apple ID install lasts 7 days, then press Play again in Xcode.
+TestFlight needs a paid Apple Developer account — you do not need that.
+
 
 WHAT THE BUTTONS DO IN THE GAME
 -------------------------------
-Play     — start a board. Drag to aim, release to shoot. Match 3+ of a
-           color to pop. Floating bubbles fall for extra points.
-Friends  — your 6-letter friend code. Messages / Email / More send an
-           invite. Friends are other Bubble Me players, not X or Google.
-Photo    — tap the circle on Home to pick a picture for your shooter.
-Haptic   — turn aiming rumble on/off (works on a real iPhone, not Simulator).
-Bomb / Fire / Face — tap one, then shoot.
+Play Arcade  — endless high score. Same boards all week. Resets Saturday
+               midnight Chicago time. Unlimited shots.
+Daily Board  — 90 unique boards, one per calendar day (Chicago).
+Levels       — 500 unique stages. Stars: 1 = 25 Bubbles, 2 = 50, 3 = 75
+               (you only get the difference if you beat a previous star).
+Continue     — resume a paused run (you can leave to Battle or Home).
+Battle CPU   — same board; CPU shoots on its copy and uses battle powers
+               on you. ZigZag / Mirror / Shuffle hit the opponent.
+Friend room  — Create a 4-letter code, share it. Friend taps Join. Nearby
+               Wi-Fi / Bluetooth. If nobody connects, a stand-in plays.
+Pause        — saves progress. Home / Battle / quit are all safe.
+Me           — Game Center sign-in syncs Bubbles, cosmetics, scores.
+Settings     — Music, SFX, haptics, alerts.
+Friends      — 6-letter friend code. Messages / Email / More.
+
+
+POWER-UPS (same as bubbleme.fun)
+--------------------------------
+Arcade / Levels / Daily:
+  Bomb  — pops a radius around the landing spot
+  Fire  — melts a line of bubbles
+  Face  — wipes every bubble of the color you hit
+
+Battle only (used on the opponent):
+  ZigZag  — their next shots swerve
+  Mirror  — their aim is flipped
+  Shuffle — their board colors scramble
 
 
 COMMON PROBLEMS
@@ -100,8 +124,12 @@ White screen / blank game
     Make sure you opened BubbleMe.xcodeproj, not a single .swift file.
     Product menu → Clean Build Folder, then Play again.
 
-No vibration
+No vibration / no Game Center
     The Simulator cannot vibrate. Use a real iPhone.
+    Game Center sign-in may ask you to sign into iCloud on the device.
+
+No music
+    Settings → Music on. Turn the iPhone silent switch off.
 
 Build failed, red errors
     Xcode menu → Settings → Platforms. Install iOS if it asks.
@@ -110,6 +138,9 @@ Build failed, red errors
 “iPhone is busy” / “Preparing…”
     Wait. The first install on a phone can take a few minutes.
 
+Friend battle “can’t find them”
+    Both phones on the same Wi-Fi. Allow local network when iOS asks.
+    Or tap Play a stand-in.
 
 You do not need to add SpriteKit, copy files, or edit Info.plist.
 That is already done inside this project.

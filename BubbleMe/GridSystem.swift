@@ -74,6 +74,21 @@ final class Board {
         }
     }
 
+    /// Fisher–Yates on colors only — positions stay (bubbleme.fun Shuffle).
+    func shuffleColors(_ rng: inout RNG) {
+        var bubbles = all()
+        guard bubbles.count > 1 else { return }
+        var colors = bubbles.map(\.color)
+        for i in stride(from: colors.count - 1, through: 1, by: -1) {
+            let j = Int(rng.next() % UInt64(i + 1))
+            colors.swapAt(i, j)
+        }
+        for (i, b) in bubbles.enumerated() {
+            _ = remove(col: b.col, row: b.row)
+            _ = spawn(col: b.col, row: b.row, color: colors[i], face: b.face, pickup: b.pickup)
+        }
+    }
+
     /// Shift every bubble down one hex row, the way the web game does. Returns bubbles that fell off the bottom.
     @discardableResult
     func shiftDown() -> [GridBubble] {

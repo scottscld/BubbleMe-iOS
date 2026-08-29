@@ -28,6 +28,12 @@
 	<string>Take a photo to use as your shooter.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Bubble Me uses your photo to skin the shooter and Face Ball.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Bubble Me uses the local network so you can battle a friend nearby.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_bubbleme-btl._tcp</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

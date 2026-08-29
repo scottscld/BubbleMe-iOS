@@ -50,20 +50,28 @@ struct LevelsHub: View {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: 8)], spacing: 8) {
                                 ForEach(LevelsCatalog.levels(in: pack.id)) { lvl in
                                     let available = lvl.id <= profile.highestLevel
+                                    let stars = profile.stars(for: lvl.id)
                                     Button {
                                         if available { onPlay(lvl.id) }
                                     } label: {
-                                        VStack(spacing: 4) {
+                                        VStack(spacing: 3) {
                                             Text("\(lvl.id)")
                                                 .font(.display(16, weight: .bold))
                                             Text(lvl.goal)
                                                 .font(.system(size: 9, weight: .medium, design: .rounded))
                                                 .lineLimit(2)
                                                 .multilineTextAlignment(.center)
+                                            HStack(spacing: 2) {
+                                                ForEach(1...3, id: \.self) { i in
+                                                    Image(systemName: i <= stars ? "star.fill" : "star")
+                                                        .font(.system(size: 8))
+                                                        .foregroundStyle(i <= stars ? Palette.accent : Palette.muted.opacity(0.45))
+                                                }
+                                            }
                                         }
                                         .foregroundStyle(available ? Palette.fg : Palette.muted)
                                         .frame(maxWidth: .infinity)
-                                        .frame(height: 64)
+                                        .frame(height: 78)
                                         .background(available ? Palette.surface2 : Palette.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     }
                                     .disabled(!available)
@@ -89,35 +97,86 @@ struct LevelsHub: View {
 }
 
 struct BattleHub: View {
+    @ObservedObject var profile: ProfileManager
     var onCPU: () -> Void
+    var onFriend: (String, Bool) -> Void
+    @State private var join = ""
+    @State private var created = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Battle")
-                .font(.display(32, weight: .bold))
-            Text("Same seeded board. First to clear — or highest score — wins.")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(Palette.muted)
-            Button("Duel the CPU", action: onCPU)
-                .buttonStyle(PrimaryButton())
-            Text("Invites")
-                .font(.display(18))
-                .padding(.top, 12)
-            Text("Challenge a friend from the Friends tab. They’ll appear here.")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(Palette.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Palette.border, lineWidth: 1)
-                )
-            Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Battle")
+                    .font(.display(32, weight: .bold))
+                Text("Same seeded board. First to clear — or highest score — wins. ZigZag, Mirror, and Shuffle hit the opponent, not you.")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(Palette.muted)
+                Button("Duel the CPU", action: onCPU)
+                    .buttonStyle(PrimaryButton())
+                Text("The CPU shoots back on its own copy of the board and will throw ZigZag / Mirror / Shuffle at you.")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(Palette.muted)
+
+                Text("Friend nearby")
+                    .font(.display(18))
+                    .padding(.top, 8)
+                Text("Same Wi‑Fi or Bluetooth. You host a 4-letter room; they type it in Join. If nobody connects in 15 seconds, a stand-in plays that board.")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(Palette.muted)
+
+                if created.isEmpty {
+                    Button("Create a room") {
+                        created = RoomCode.make()
+                        profile.battleCode = created
+                        profile.save()
+                    }
+                    .buttonStyle(SecondaryButton())
+                } else {
+                    Text(created)
+                        .font(.system(size: 40, weight: .bold, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity)
+                    ShareLink(item: "Battle me in Bubble Me — room \(created). Open Battle, tap Join, type \(created).") {
+                        Label("Share code", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                    }
+                    .foregroundStyle(Palette.fg)
+                    Button("Start waiting") { onFriend(created, true) }
+                        .buttonStyle(PrimaryButton())
+                }
+
+                HStack(spacing: 10) {
+                    TextField("JOIN", text: $join)
+                        .textInputAutocapitalization(.characters)
+                        .disableAutocorrection(true)
+                        .font(.system(size: 22, weight: .bold, design: .monospaced))
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Palette.border, lineWidth: 1)
+                        )
+                        .onChange(of: join) { _, v in
+                            join = String(v.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(4))
+                        }
+                    Button("Join") { onFriend(join, false) }
+                        .buttonStyle(PrimaryButton())
+                        .opacity(join.count == 4 ? 1 : 0.45)
+                        .disabled(join.count != 4)
+                }
+            }
+            .foregroundStyle(Palette.fg)
+            .padding(20)
+            .padding(.bottom, 24)
         }
-        .foregroundStyle(Palette.fg)
-        .padding(20)
         .background(Palette.bg)
+        .onAppear {
+            if created.isEmpty, !profile.battleCode.isEmpty {
+                created = profile.battleCode
+            }
+        }
     }
 }
 
@@ -208,6 +267,7 @@ struct ProfileHub: View {
                 Text("Friend code \(profile.friendCode)")
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Palette.muted)
+                GameCenterRow()
                 HStack {
                     stat("\(profile.wins)", "Wins")
                     stat("\(profile.losses)", "Losses")
@@ -232,6 +292,35 @@ struct ProfileHub: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+private struct GameCenterRow: View {
+    @ObservedObject var cloud = CloudSync.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "gamecontroller.fill")
+                Text(cloud.signedIn ? cloud.playerName : "Game Center")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                Spacer()
+                if cloud.signedIn {
+                    Text("Synced")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(Palette.aqua)
+                } else {
+                    Button("Sign in") { CloudSync.shared.authenticate() }
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.accent)
+                }
+            }
+            Text("Sign in with Game Center so Bubbles, cosmetics, and scores sync across your devices.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(Palette.muted)
+        }
+        .padding(14)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
@@ -266,6 +355,14 @@ struct SettingsSheet: View {
                         get: { profile.hapticEnabled },
                         set: { profile.setHaptic($0) }
                     ))
+                    Toggle("Music", isOn: Binding(
+                        get: { profile.musicEnabled },
+                        set: { profile.setMusic($0) }
+                    ))
+                    Toggle("Sound effects", isOn: Binding(
+                        get: { profile.sfxEnabled },
+                        set: { profile.setSfx($0) }
+                    ))
                     Toggle("Friend alerts", isOn: $alerts)
                         .onChange(of: alerts) { _, on in
                             if on { FriendsManager(friendCode: profile.friendCode).requestAlertPermission() }
@@ -275,6 +372,11 @@ struct SettingsSheet: View {
                     TextField("Display name", text: $profile.username)
                         .onChange(of: profile.username) { _, _ in profile.save() }
                     LabeledContent("Friend code", value: profile.friendCode)
+                    LabeledContent("Game Center", value: CloudSync.shared.signedIn ? CloudSync.shared.playerName : "Not signed in")
+                    Button(CloudSync.shared.signedIn ? "Sync now" : "Sign in with Game Center") {
+                        CloudSync.shared.authenticate()
+                        if CloudSync.shared.signedIn { CloudSync.shared.push(profile: profile) }
+                    }
                 }
             }
             .navigationTitle("Settings")
