@@ -1,0 +1,115 @@
+BUBBLE ME — OPEN THIS FIRST
+===========================
+
+This folder is a finished Xcode project. You do NOT create a new project
+in Xcode. You just open this one and press Play.
+
+You need:
+  • A Mac (Xcode does not run on Windows or iPad)
+  • Xcode from the Mac App Store (search “Xcode”, install, open it once
+    so it finishes installing extra tools)
+
+
+STEP 1 — Unzip
+--------------
+If this is still a .zip file:
+  1. Double-click BubbleMe-Xcode.zip
+  2. A folder named BubbleMe-Xcode appears
+  3. Open that folder
+
+
+STEP 2 — Open the project
+-------------------------
+Double-click the file named:
+
+    BubbleMe.xcodeproj
+
+It has a blue Xcode icon. That is the project. Do not open the individual
+.swift files by themselves.
+
+If your Mac says “Are you sure you want to open it?” click Open.
+
+
+STEP 3 — Pick a phone
+---------------------
+At the TOP CENTER of Xcode you will see something like:
+
+    BubbleMe    >    iPhone 16
+
+Tap the phone name and choose any iPhone simulator
+(iPhone 16, iPhone 15, iPhone 14 — any of them is fine).
+
+
+STEP 4 — Press Play
+-------------------
+Click the triangle Play button at the top left
+(or press the Command key and the R key together).
+
+The first time takes 1–3 minutes. A fake iPhone window (the Simulator)
+will open. Tap Play in the app, then drag to aim and release to shoot.
+
+
+THAT’S IT
+---------
+You should see:
+  • Home screen with your photo circle, Play, Friends, and haptic toggle
+  • A bubble board you can shoot
+  • Bomb / Fire / Face power-ups at the bottom
+  • Friends sheet with Messages, Email, and More
+
+
+IF XCODE ASKS ABOUT A TEAM (signing)
+------------------------------------
+1. In the LEFT sidebar click the blue BubbleMe icon at the very top
+2. Click the BubbleMe target under TARGETS
+3. Open the “Signing & Capabilities” tab
+4. Check “Automatically manage signing”
+5. Team: click Add Account… and sign in with your Apple ID (free)
+
+The Simulator works even with Team set to None. A real iPhone needs the
+Apple ID step.
+
+
+TO RUN ON YOUR REAL IPHONE
+--------------------------
+1. Plug the iPhone in with a cable
+2. Unlock the phone and tap Trust if asked
+3. In Xcode, pick your iPhone from the device list (instead of a simulator)
+4. Press Play
+5. On the iPhone go to Settings → General → VPN & Device Management
+   and trust your Apple ID
+
+
+WHAT THE BUTTONS DO IN THE GAME
+-------------------------------
+Play     — start a board. Drag to aim, release to shoot. Match 3+ of a
+           color to pop. Floating bubbles fall for extra points.
+Friends  — your 6-letter friend code. Messages / Email / More send an
+           invite. Friends are other Bubble Me players, not X or Google.
+Photo    — tap the circle on Home to pick a picture for your shooter.
+Haptic   — turn aiming rumble on/off (works on a real iPhone, not Simulator).
+Bomb / Fire / Face — tap one, then shoot.
+
+
+COMMON PROBLEMS
+---------------
+“Untrusted developer” on iPhone
+    Settings → General → VPN & Device Management → tap your name → Trust.
+
+White screen / blank game
+    Make sure you opened BubbleMe.xcodeproj, not a single .swift file.
+    Product menu → Clean Build Folder, then Play again.
+
+No vibration
+    The Simulator cannot vibrate. Use a real iPhone.
+
+Build failed, red errors
+    Xcode menu → Settings → Platforms. Install iOS if it asks.
+    Quit Xcode, open BubbleMe.xcodeproj again, press Play.
+
+“iPhone is busy” / “Preparing…”
+    Wait. The first install on a phone can take a few minutes.
+
+
+You do not need to add SpriteKit, copy files, or edit Info.plist.
+That is already done inside this project.
