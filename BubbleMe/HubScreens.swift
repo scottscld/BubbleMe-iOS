@@ -542,48 +542,4 @@ struct ArcadeBoardSheet: View {
         default: return Palette.muted
         }
     }
-}ction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
-struct ArcadeBoardSheet: View {
-    var best: Int
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text("Resets in \(ArcadeWeek.formatCountdown(until: ArcadeWeek.nextReset(), now: context.date))")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Palette.muted)
-                }
-                Text("This week’s best")
-                    .font(.display(18))
-                Text("\(best)")
-                    .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(Palette.accent)
-                Text("Everyone plays the same generated boards this week. Waves get harder; points go up.")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(Palette.muted)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
-            .background(Palette.bg)
-            .foregroundStyle(Palette.fg)
-            .navigationTitle("Leaderboard")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-    }
 }
