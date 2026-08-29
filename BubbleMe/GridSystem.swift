@@ -67,6 +67,34 @@ final class Board {
         cells.flatMap { $0.compactMap { $0 } }
     }
 
+    func clear() {
+        for r in 0..<maxRows {
+            for c in 0..<cells[r].count { cells[r][c] = nil }
+        }
+    }
+
+    /// Shift every bubble down one hex row, the way the web game does. Returns bubbles that fell off the bottom.
+    @discardableResult
+    func shiftDown() -> [GridBubble] {
+        var overflow: [GridBubble] = []
+        for r in stride(from: maxRows - 1, through: 0, by: -1) {
+            for c in 0..<HexGrid.colCount(r) {
+                guard var b = cells[r][c] else { continue }
+                cells[r][c] = nil
+                let nr = r + 1
+                if nr >= maxRows {
+                    overflow.append(b)
+                    continue
+                }
+                let nc = min(b.col, HexGrid.colCount(nr) - 1)
+                b.row = nr
+                b.col = nc
+                cells[nr][nc] = b
+            }
+        }
+        return overflow
+    }
+
     func cluster(fromCol col: Int, row: Int) -> [GridBubble] {
         guard let start = get(col: col, row: row) else { return [] }
         var seen = Set<Int>()

@@ -318,13 +318,13 @@ struct GameContainer: View {
                 Spacer()
 
                 HStack(spacing: 10) {
-                    PowerButton(title: "Bomb", count: session.bombs, selected: session.loaded == .bomb) {
+                    PowerButton(kind: .bomb, count: session.bombs, selected: session.loaded == .bomb, photo: profile.photo) {
                         session.load(.bomb)
                     }
-                    PowerButton(title: "Fire", count: session.fire, selected: session.loaded == .fire) {
+                    PowerButton(kind: .fire, count: session.fire, selected: session.loaded == .fire, photo: profile.photo) {
                         session.load(.fire)
                     }
-                    PowerButton(title: "Face", count: session.face, selected: session.loaded == .face) {
+                    PowerButton(kind: .face, count: session.face, selected: session.loaded == .face, photo: profile.photo) {
                         session.load(.face)
                     }
                 }
@@ -364,27 +364,76 @@ struct GameContainer: View {
 }
 
 private struct PowerButton: View {
-    let title: String
+    let kind: PowerUp
     let count: Int
     let selected: Bool
+    var photo: UIImage?
     let action: () -> Void
+    @State private var pulse = false
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 2) {
-                Text(title).font(.system(size: 11, weight: .semibold, design: .rounded))
-                Text("\(count)").font(.system(size: 16, weight: .bold, design: .rounded).monospacedDigit())
+            VStack(spacing: 4) {
+                art
+                    .frame(height: 34)
+                Text("\(count)")
+                    .font(.system(size: 14, weight: .bold, design: .rounded).monospacedDigit())
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 52)
+            .frame(height: 64)
             .background(
-                selected ? Palette.accent : Color.white.opacity(0.12),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                selected ? Palette.accent.opacity(0.35) : Color.white.opacity(0.10),
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(selected ? Palette.accent : Palette.border, lineWidth: selected ? 2 : 1)
             )
         }
         .foregroundStyle(.white)
         .disabled(count <= 0)
         .opacity(count <= 0 ? 0.4 : 1)
+        .onAppear { pulse = true }
+    }
+
+    @ViewBuilder
+    private var art: some View {
+        switch kind {
+        case .bomb:
+            Text("💣")
+                .font(.system(size: 28))
+                .shadow(color: .orange.opacity(0.55), radius: selected ? 8 : 0)
+        case .fire:
+            Text("🔥")
+                .font(.system(size: 28))
+        case .face:
+            ZStack {
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [.red, .orange, .yellow, .green, .cyan, .blue, .purple, .red],
+                            center: .center
+                        ),
+                        lineWidth: 3
+                    )
+                    .frame(width: 36, height: 36)
+                    .scaleEffect(pulse ? 1.18 : 0.92)
+                    .opacity(pulse ? 1 : 0.55)
+                    .animation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true), value: pulse)
+                Group {
+                    if let photo {
+                        Image(uiImage: photo)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Text("🙂")
+                            .font(.system(size: 18))
+                    }
+                }
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
+            }
+        }
     }
 }
 

@@ -26,8 +26,10 @@ final class GameScene: SKScene {
     private var score = 0
     private var shotsLeft = 24
     private var dropIn = 5
+    private var dropIndex = 0
     private var pausedGame = false
     private var won = false
+    private var skipNextDrop = false
     private var rng: RNG = RNG(seed: 1)
 
     init(size: CGSize, inventory: Inventory, seed: Int, mode: PlayMode, levelId: Int) {
@@ -63,9 +65,10 @@ final class GameScene: SKScene {
         nextDot.position = CGPoint(x: 46, y: -8)
         shooter.addChild(nextDot)
 
-        trajectory.strokeColor = SKColor.white.withAlphaComponent(0.78)
-        trajectory.lineWidth = 2.4
-        trajectory.glowWidth = 2
+        trajectory.lineWidth = 3
+        trajectory.glowWidth = 5
+        trajectory.lineCap = .round
+        trajectory.zPosition = 8
         addChild(trajectory)
 
         seedBoard(wave: 1)
@@ -75,13 +78,13 @@ final class GameScene: SKScene {
 
     func seedBoard(wave: Int) {
         self.wave = wave
+        board.clear()
         let colors = min(6, 4 + (wave - 1) / 2 + (mode == .level ? levelId / 80 : 0))
         let palette = Array(BubbleColor.allCases.prefix(max(3, colors)))
         let rows = min(8, 5 + wave / 2 + (mode == .level ? (levelId / 100) : 0))
         rng = RNG(seed: seed &+ wave &* 9973)
         for row in 0..<rows {
             for col in 0..<HexGrid.colCount(row) {
-                // hollow-ish boards on some levels
                 if mode == .level, levelId % 7 == 0, row > 0, row < rows - 1, col > 0, col < HexGrid.colCount(row) - 1, rng.next() % 4 == 0 {
                     continue
                 }
@@ -105,6 +108,7 @@ final class GameScene: SKScene {
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         fire()
+        clearAimDots()
         trajectory.path = nil
     }
 
@@ -122,21 +126,41 @@ final class GameScene: SKScene {
     }
 
     private func drawPath() {
+        clearAimDots()
         var x = shooter.position.x
         var y = shooter.position.y + 22
         var vx = cos(aimAngle) * 8
         var vy = sin(aimAngle) * 8
         let path = CGMutablePath()
         path.move(to: CGPoint(x: x, y: y))
-        for _ in 0..<90 {
+        let hue = BubbleArt.uiColor(currentColor)
+        trajectory.strokeColor = hue.withAlphaComponent(0.9)
+        var i = 0
+        while i < 110 {
             x += vx
             y += vy
+            i += 1
             if x < 22 { x = 22; vx *= -1 }
             if x > size.width - 22 { x = size.width - 22; vx *= -1 }
             path.addLine(to: CGPoint(x: x, y: y))
+            if i % 3 == 0 {
+                let t = CGFloat(i) / 110
+                let dot = SKShapeNode(circleOfRadius: max(1.4, 3.1 - t * 1.4))
+                dot.fillColor = hue.withAlphaComponent(0.85 * (1 - t * 0.45))
+                dot.strokeColor = .clear
+                dot.name = "aimdot"
+                dot.zPosition = 8
+                dot.position = CGPoint(x: x, y: y)
+                addChild(dot)
+            }
             if y > size.height - 80 { break }
+            if bubble(at: CGPoint(x: x, y: y)) != nil { break }
         }
         trajectory.path = path
+    }
+
+    private func clearAimDots() {
+        enumerateChildNodes(withName: "aimdot") { n, _ in n.removeFromParent() }
     }
 
     private func fire() {
@@ -144,6 +168,7 @@ final class GameScene: SKScene {
         let power = powers.consume()
         let node = BubbleArt.sprite(color: currentColor, diameter: HexGrid.diameter, name: "shot")
         node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 26)
+        node.zPosition = 9
         node.userData = [
             "vx": NSNumber(value: Double(cos(aimAngle) * 780)),
             "vy": NSNumber(value: Double(sin(aimAngle) * 780)),
@@ -153,17 +178,12 @@ final class GameScene: SKScene {
         addChild(node)
         flying = node
         shotsLeft -= 1
-        dropIn -= 1
         Haptics.shoot()
         currentColor = nextColor
         nextColor = BubbleColor.allCases[Int(rng.next() % 6)]
         cannon.texture = BubbleArt.texture(for: currentColor, diameter: (HexGrid.diameter + 8) * UIScreen.main.scale)
         nextDot.texture = BubbleArt.texture(for: nextColor, diameter: 20 * UIScreen.main.scale)
         onHud?(score, shotsLeft, dropIn)
-        if dropIn <= 0 {
-            dropIn = max(3, 6 - wave)
-            dropCeiling()
-        }
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -188,6 +208,7 @@ final class GameScene: SKScene {
             if shot.position.y > size.height - 40 {
                 shot.removeFromParent()
                 flying = nil
+                finishShot()
             }
             return
         }
@@ -201,25 +222,47 @@ final class GameScene: SKScene {
         flying = nil
         let color = BubbleColor(rawValue: shot.userData?["color"] as? String ?? "red") ?? .red
         let power = shot.userData?["power"] as? String ?? ""
-        guard let cell = emptyNeighbor(of: hit, near: shot.position) else { return }
+        guard let cell = emptyNeighbor(of: hit, near: shot.position) else {
+            finishShot()
+            return
+        }
         if power == "bomb" {
             Haptics.bomb()
             let victims = board.all().filter { abs($0.col - cell.col) + abs($0.row - cell.row) <= 2 }
             pop(victims, kind: .bomb)
+            finishShot()
             return
         }
         if power == "face", let hit {
             Haptics.face()
             pop(board.all().filter { $0.color == hit.color }, kind: .face)
+            finishShot()
             return
         }
-        guard let placed = board.spawn(col: cell.col, row: cell.row, color: color) else { return }
-        let cluster = board.cluster(fromCol: placed.col, row: placed.row)
-        if cluster.count >= 3 {
-            pop(cluster, kind: .pop)
-        } else {
-            redrawBoard()
+        if let placed = board.spawn(col: cell.col, row: cell.row, color: color) {
+            let cluster = board.cluster(fromCol: placed.col, row: placed.row)
+            if cluster.count >= 3 {
+                pop(cluster, kind: .pop)
+            } else {
+                redrawBoard()
+            }
         }
+        finishShot()
+    }
+
+    /// Ceiling only drops after the shot is done — never while a bubble is in the air.
+    private func finishShot() {
+        if skipNextDrop {
+            skipNextDrop = false
+            onHud?(score, shotsLeft, dropIn)
+            return
+        }
+        dropIn -= 1
+        if dropIn <= 0 {
+            dropIn = max(3, 6 - wave)
+            applyCeilingDrop()
+        }
+        onHud?(score, shotsLeft, dropIn)
     }
 
     private enum PopKind { case pop, bomb, fire, face }
@@ -249,6 +292,8 @@ final class GameScene: SKScene {
                 wave += 1
                 seedBoard(wave: wave)
                 shotsLeft += 8
+                dropIn = max(3, 6 - wave)
+                skipNextDrop = true
                 redrawBoard()
                 Haptics.win()
             } else {
@@ -259,12 +304,17 @@ final class GameScene: SKScene {
         }
     }
 
-    private func dropCeiling() {
-        // shift every bubble down one row (simple pressure)
-        let all = board.all().sorted { $0.row > $1.row }
-        for b in all {
-            _ = board.remove(col: b.col, row: b.row)
-            _ = board.spawn(col: min(b.col, HexGrid.colCount(b.row + 1) - 1), row: min(board.maxRows - 1, b.row + 1), color: b.color)
+    private func applyCeilingDrop() {
+        _ = board.shiftDown()
+        dropIndex += 1
+        var rowRng = RNG(seed: seed &+ wave &* 7919 &+ dropIndex &* 131)
+        let colors = min(6, 4 + (wave - 1) / 2)
+        let palette = Array(BubbleColor.allCases.prefix(max(3, colors)))
+        for col in 0..<HexGrid.colCount(0) {
+            if board.get(col: col, row: 0) == nil {
+                let color = palette[Int(rowRng.next() % UInt64(palette.count))]
+                _ = board.spawn(col: col, row: 0, color: color)
+            }
         }
         redrawBoard()
     }
@@ -302,7 +352,7 @@ final class GameScene: SKScene {
     private func bubble(at p: CGPoint) -> GridBubble? {
         for b in board.all() {
             let pos = position(of: b)
-            if hypot(p.x - pos.x, p.y - pos.y) < HexGrid.diameter * 0.9 { return b }
+            if hypot(p.x - pos.x, p.y - pos.y) < HexGrid.diameter * 0.88 { return b }
         }
         return nil
     }
@@ -319,12 +369,20 @@ final class GameScene: SKScene {
             let options = HexGrid.neighbors(col: hit.col, row: hit.row)
                 .filter { board.get(col: $0.0, row: $0.1) == nil && board.inBounds(col: $0.0, row: $0.1) }
             if let best = options.min(by: { a, b in
-                let pa = CGPoint(x: CGFloat(a.0), y: CGFloat(a.1))
-                let pb = CGPoint(x: CGFloat(b.0), y: CGFloat(b.1))
-                return hypot(p.x - pa.x, p.y - pa.y) < hypot(p.x - pb.x, p.y - pb.y)
+                hypot(p.x - position(ofCol: a.0, row: a.1).x, p.y - position(ofCol: a.0, row: a.1).y)
+                    < hypot(p.x - position(ofCol: b.0, row: b.1).x, p.y - position(ofCol: b.0, row: b.1).y)
             }) { return (best.0, best.1) }
         }
         return (HexGrid.cols / 2, 0)
+    }
+
+    private func position(ofCol col: Int, row: Int) -> CGPoint {
+        let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
+        let xOff: CGFloat = row % 2 == 1 ? HexGrid.radius : 0
+        return CGPoint(
+            x: ox + CGFloat(col) * HexGrid.diameter + HexGrid.radius + xOff,
+            y: size.height - 88 - CGFloat(row) * HexGrid.rowH
+        )
     }
 
     private func addBackdrop() {
