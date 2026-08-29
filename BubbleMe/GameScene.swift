@@ -9,6 +9,7 @@ final class GameScene: SKScene {
     weak var profile: ProfileManager?
     var onHud: ((Int, Int, Int) -> Void)?
     var onWin: (() -> Void)?
+    var onLose: (() -> Void)?
     var mode: PlayMode = .arcade
     var levelId = 1
     var seed: Int = 1
@@ -29,7 +30,10 @@ final class GameScene: SKScene {
     private var dropIndex = 0
     private var pausedGame = false
     private var won = false
+    private var lost = false
     private var skipNextDrop = false
+    private var cancelAim = false
+    private var dangerY: CGFloat = 248
     private var rng: RNG = RNG(seed: 1)
 
     init(size: CGSize, inventory: Inventory, seed: Int, mode: PlayMode, levelId: Int) {
@@ -51,8 +55,11 @@ final class GameScene: SKScene {
         addBackdrop()
         shooter = SKNode()
         shooter.name = "shooter"
-        shooter.position = CGPoint(x: size.width / 2, y: 118)
+        // Sit well above the Bubble Bag so the cannon isn't mixed with power-ups.
+        shooter.position = CGPoint(x: size.width / 2, y: 196)
+        dangerY = shooter.position.y + 58
         addChild(shooter)
+        addDangerLine()
 
         let d = HexGrid.diameter
         cannon = BubbleArt.sprite(color: currentColor, diameter: d + 8, name: "cannon")
@@ -70,6 +77,16 @@ final class GameScene: SKScene {
         trajectory.lineCap = .round
         trajectory.zPosition = 8
         addChild(trajectory)
+
+        let hint = SKLabelNode(fontNamed: "AvenirNext-Bold")
+        hint.name = "cancelHint"
+        hint.text = "Release to cancel"
+        hint.fontSize = 13
+        hint.fontColor = SKColor(red: 1, green: 0.35, blue: 0.48, alpha: 1)
+        hint.position = CGPoint(x: size.width / 2, y: shooter.position.y - 36)
+        hint.alpha = 0
+        hint.zPosition = 12
+        addChild(hint)
 
         seedBoard(wave: 1)
         redrawBoard()
@@ -97,17 +114,44 @@ final class GameScene: SKScene {
     func loadPower(_ p: PowerUp) { powers.toggle(p) }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let t = touches.first else { return }
+        guard flying == nil, !pausedGame, !won, !lost, let t = touches.first else { return }
+        cancelAim = false
         aim(at: t.location(in: self))
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let t = touches.first else { return }
-        aim(at: t.location(in: self))
+        guard flying == nil, !pausedGame, !won, !lost, let t = touches.first else { return }
+        let p = t.location(in: self)
+        // Slide down past the shooter to cancel.
+        if p.y < shooter.position.y - 6 {
+            cancelAim = true
+            clearAimDots()
+            trajectory.path = nil
+            childNode(withName: "cancelHint")?.alpha = 1
+            Haptics.aimTick()
+            return
+        }
+        cancelAim = false
+        childNode(withName: "cancelHint")?.alpha = 0
+        aim(at: p)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        childNode(withName: "cancelHint")?.alpha = 0
+        if cancelAim {
+            cancelAim = false
+            clearAimDots()
+            trajectory.path = nil
+            return
+        }
         fire()
+        clearAimDots()
+        trajectory.path = nil
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        cancelAim = false
+        childNode(withName: "cancelHint")?.alpha = 0
         clearAimDots()
         trajectory.path = nil
     }
@@ -133,8 +177,7 @@ final class GameScene: SKScene {
         var vy = sin(aimAngle) * 8
         let path = CGMutablePath()
         path.move(to: CGPoint(x: x, y: y))
-        let hue = BubbleArt.uiColor(currentColor)
-        trajectory.strokeColor = hue.withAlphaComponent(0.9)
+        var target: GridBubble?
         var i = 0
         while i < 110 {
             x += vx
@@ -143,20 +186,42 @@ final class GameScene: SKScene {
             if x < 22 { x = 22; vx *= -1 }
             if x > size.width - 22 { x = size.width - 22; vx *= -1 }
             path.addLine(to: CGPoint(x: x, y: y))
-            if i % 3 == 0 {
-                let t = CGFloat(i) / 110
-                let dot = SKShapeNode(circleOfRadius: max(1.4, 3.1 - t * 1.4))
-                dot.fillColor = hue.withAlphaComponent(0.85 * (1 - t * 0.45))
-                dot.strokeColor = .clear
-                dot.name = "aimdot"
-                dot.zPosition = 8
-                dot.position = CGPoint(x: x, y: y)
-                addChild(dot)
-            }
             if y > size.height - 80 { break }
-            if bubble(at: CGPoint(x: x, y: y)) != nil { break }
+            if let hit = bubble(at: CGPoint(x: x, y: y)) {
+                target = hit
+                break
+            }
         }
+        // Face Ball previews the color it would wipe.
+        let hue: UIColor
+        if powers.loaded == .face, let target {
+            hue = BubbleArt.uiColor(target.color)
+        } else if powers.loaded == .face {
+            hue = UIColor.white
+        } else {
+            hue = BubbleArt.uiColor(currentColor)
+        }
+        trajectory.strokeColor = hue.withAlphaComponent(0.9)
         trajectory.path = path
+        var px = shooter.position.x
+        var py = shooter.position.y + 22
+        var pvx = cos(aimAngle) * 8
+        var pvy = sin(aimAngle) * 8
+        for j in 1...i {
+            px += pvx
+            py += pvy
+            if px < 22 { px = 22; pvx *= -1 }
+            if px > size.width - 22 { px = size.width - 22; pvx *= -1 }
+            if j % 3 != 0 { continue }
+            let t = CGFloat(j) / 110
+            let dot = SKShapeNode(circleOfRadius: max(1.4, 3.1 - t * 1.4))
+            dot.fillColor = hue.withAlphaComponent(0.85 * (1 - t * 0.45))
+            dot.strokeColor = .clear
+            dot.name = "aimdot"
+            dot.zPosition = 8
+            dot.position = CGPoint(x: px, y: py)
+            addChild(dot)
+        }
     }
 
     private func clearAimDots() {
@@ -164,7 +229,8 @@ final class GameScene: SKScene {
     }
 
     private func fire() {
-        guard flying == nil, !pausedGame, !won else { return }
+        guard flying == nil, !pausedGame, !won, !lost else { return }
+        if mode != .arcade, shotsLeft <= 0 { return }
         let power = powers.consume()
         let node = BubbleArt.sprite(color: currentColor, diameter: HexGrid.diameter, name: "shot")
         node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 26)
@@ -177,7 +243,7 @@ final class GameScene: SKScene {
         ]
         addChild(node)
         flying = node
-        shotsLeft -= 1
+        if mode != .arcade { shotsLeft -= 1 }
         Haptics.shoot()
         currentColor = nextColor
         nextColor = BubbleColor.allCases[Int(rng.next() % 6)]
@@ -188,41 +254,52 @@ final class GameScene: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         guard let shot = flying else { return }
-        let vx = CGFloat((shot.userData?["vx"] as? NSNumber)?.doubleValue ?? 0)
-        let vy = CGFloat((shot.userData?["vy"] as? NSNumber)?.doubleValue ?? 0)
-        shot.position.x += vx / 60
-        shot.position.y += vy / 60
-        if shot.position.x < 22 {
-            shot.userData?["vx"] = NSNumber(value: Double(-vx))
-            shot.position.x = 22
-        }
-        if shot.position.x > size.width - 22 {
-            shot.userData?["vx"] = NSNumber(value: Double(-vx))
-            shot.position.x = size.width - 22
-        }
-        let power = shot.userData?["power"] as? String ?? ""
-        if power == "fire" {
-            if let hit = bubble(at: shot.position) {
-                pop([hit], kind: .fire)
+        let n = 8
+        let wall = HexGrid.radius + 4
+        for _ in 0..<n {
+            var vx = CGFloat((shot.userData?["vx"] as? NSNumber)?.doubleValue ?? 0)
+            var vy = CGFloat((shot.userData?["vy"] as? NSNumber)?.doubleValue ?? 0)
+            let speed = hypot(vx, vy)
+            guard speed > 0 else { return }
+            let hunk = (speed / 60) / CGFloat(n)
+            shot.position.x += (vx / speed) * hunk
+            shot.position.y += (vy / speed) * hunk
+            if shot.position.x < wall {
+                shot.userData?["vx"] = NSNumber(value: Double(abs(vx)))
+                shot.position.x = wall
+            } else if shot.position.x > size.width - wall {
+                shot.userData?["vx"] = NSNumber(value: Double(-abs(vx)))
+                shot.position.x = size.width - wall
             }
-            if shot.position.y > size.height - 40 {
-                shot.removeFromParent()
-                flying = nil
-                finishShot()
+            let power = shot.userData?["power"] as? String ?? ""
+            if power == "fire" {
+                if let hit = bubble(at: shot.position) {
+                    pop([hit], kind: .fire)
+                }
+                if shot.position.y > size.height - 40 {
+                    shot.removeFromParent()
+                    flying = nil
+                    finishShot()
+                    return
+                }
+                continue
             }
-            return
-        }
-        if let hit = bubble(at: shot.position) ?? (shot.position.y > size.height - 70 ? nearest(to: shot.position) : nil) {
-            land(shot, near: hit)
+            let hit = bubble(at: shot.position)
+            let atCeil = shot.position.y > size.height - 70
+            if hit != nil || atCeil {
+                land(shot, near: hit ?? (atCeil ? nearest(to: shot.position) : nil))
+                return
+            }
         }
     }
 
     private func land(_ shot: SKSpriteNode, near hit: GridBubble?) {
+        let pos = shot.position
         shot.removeFromParent()
         flying = nil
         let color = BubbleColor(rawValue: shot.userData?["color"] as? String ?? "red") ?? .red
         let power = shot.userData?["power"] as? String ?? ""
-        guard let cell = emptyNeighbor(of: hit, near: shot.position) else {
+        guard let cell = nearestEmptyCell(hit: hit, near: pos) else {
             finishShot()
             return
         }
@@ -231,12 +308,17 @@ final class GameScene: SKScene {
             let victims = board.all().filter { abs($0.col - cell.col) + abs($0.row - cell.row) <= 2 }
             pop(victims, kind: .bomb)
             finishShot()
+            checkLose()
             return
         }
-        if power == "face", let hit {
+        if power == "face" {
             Haptics.face()
-            pop(board.all().filter { $0.color == hit.color }, kind: .face)
+            let wipe = hit?.color ?? board.get(col: cell.col, row: cell.row)?.color
+            if let wipe {
+                pop(board.all().filter { $0.color == wipe }, kind: .face)
+            }
             finishShot()
+            checkLose()
             return
         }
         if let placed = board.spawn(col: cell.col, row: cell.row, color: color) {
@@ -248,6 +330,7 @@ final class GameScene: SKScene {
             }
         }
         finishShot()
+        checkLose()
     }
 
     /// Ceiling only drops after the shot is done — never while a bubble is in the air.
@@ -263,6 +346,10 @@ final class GameScene: SKScene {
             applyCeilingDrop()
         }
         onHud?(score, shotsLeft, dropIn)
+        if mode != .arcade, shotsLeft <= 0, !won, !lost {
+            triggerLose()
+        }
+        checkLose()
     }
 
     private enum PopKind { case pop, bomb, fire, face }
@@ -291,7 +378,6 @@ final class GameScene: SKScene {
             if mode == .arcade {
                 wave += 1
                 seedBoard(wave: wave)
-                shotsLeft += 8
                 dropIn = max(3, 6 - wave)
                 skipNextDrop = true
                 redrawBoard()
@@ -317,6 +403,25 @@ final class GameScene: SKScene {
             }
         }
         redrawBoard()
+        checkLose()
+    }
+
+    private func checkLose() {
+        guard !won, !lost else { return }
+        for b in board.all() {
+            if position(of: b).y - HexGrid.radius <= dangerY {
+                triggerLose()
+                return
+            }
+        }
+    }
+
+    private func triggerLose() {
+        guard !lost, !won else { return }
+        lost = true
+        pausedGame = true
+        Haptics.lose()
+        onLose?()
     }
 
     private func burst(at bubbles: [GridBubble]) {
@@ -341,11 +446,15 @@ final class GameScene: SKScene {
     }
 
     private func position(of b: GridBubble) -> CGPoint {
+        position(ofCol: b.col, row: b.row)
+    }
+
+    private func position(ofCol col: Int, row: Int) -> CGPoint {
         let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
-        let xOff: CGFloat = b.row % 2 == 1 ? HexGrid.radius : 0
+        let xOff: CGFloat = row % 2 == 1 ? HexGrid.radius : 0
         return CGPoint(
-            x: ox + CGFloat(b.col) * HexGrid.diameter + HexGrid.radius + xOff,
-            y: size.height - 88 - CGFloat(b.row) * HexGrid.rowH
+            x: ox + CGFloat(col) * HexGrid.diameter + HexGrid.radius + xOff,
+            y: size.height - 88 - CGFloat(row) * HexGrid.rowH
         )
     }
 
@@ -364,25 +473,59 @@ final class GameScene: SKScene {
         }
     }
 
-    private func emptyNeighbor(of hit: GridBubble?, near p: CGPoint) -> (col: Int, row: Int)? {
-        if let hit {
-            let options = HexGrid.neighbors(col: hit.col, row: hit.row)
-                .filter { board.get(col: $0.0, row: $0.1) == nil && board.inBounds(col: $0.0, row: $0.1) }
-            if let best = options.min(by: { a, b in
-                hypot(p.x - position(ofCol: a.0, row: a.1).x, p.y - position(ofCol: a.0, row: a.1).y)
-                    < hypot(p.x - position(ofCol: b.0, row: b.1).x, p.y - position(ofCol: b.0, row: b.1).y)
-            }) { return (best.0, best.1) }
+    /// Web-style landing: neighbors of the hit, then any empty neighbor of the board, then any empty cell.
+    private func nearestEmptyCell(hit: GridBubble?, near p: CGPoint) -> (col: Int, row: Int)? {
+        var candidates: [(Int, Int, CGFloat)] = []
+        func consider(_ c: Int, _ r: Int) {
+            guard board.inBounds(col: c, row: r), board.get(col: c, row: r) == nil else { return }
+            let pos = position(ofCol: c, row: r)
+            candidates.append((c, r, hypot(p.x - pos.x, p.y - pos.y)))
         }
-        return (HexGrid.cols / 2, 0)
+        if let hit {
+            for n in HexGrid.neighbors(col: hit.col, row: hit.row) { consider(n.0, n.1) }
+        }
+        if p.y > size.height - 120 {
+            for c in 0..<HexGrid.colCount(0) { consider(c, 0) }
+        }
+        if candidates.isEmpty {
+            for b in board.all() {
+                for n in HexGrid.neighbors(col: b.col, row: b.row) { consider(n.0, n.1) }
+            }
+        }
+        if candidates.isEmpty {
+            for r in 0..<board.maxRows {
+                for c in 0..<HexGrid.colCount(r) { consider(c, r) }
+            }
+        }
+        return candidates.min(by: { $0.2 < $1.2 }).map { ($0.0, $0.1) }
     }
 
-    private func position(ofCol col: Int, row: Int) -> CGPoint {
-        let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
-        let xOff: CGFloat = row % 2 == 1 ? HexGrid.radius : 0
-        return CGPoint(
-            x: ox + CGFloat(col) * HexGrid.diameter + HexGrid.radius + xOff,
-            y: size.height - 88 - CGFloat(row) * HexGrid.rowH
-        )
+    private func addDangerLine() {
+        let path = CGMutablePath()
+        var x: CGFloat = 16
+        while x < size.width - 16 {
+            path.move(to: CGPoint(x: x, y: dangerY))
+            path.addLine(to: CGPoint(x: min(x + 7, size.width - 16), y: dangerY))
+            x += 14
+        }
+        let line = SKShapeNode(path: path)
+        line.strokeColor = SKColor(red: 1, green: 0.35, blue: 0.48, alpha: 0.85)
+        line.lineWidth = 1.6
+        line.glowWidth = 1
+        line.zPosition = 6
+        line.name = "danger"
+        addChild(line)
+        line.run(.repeatForever(.sequence([
+            .fadeAlpha(to: 0.35, duration: 0.7),
+            .fadeAlpha(to: 0.9, duration: 0.7),
+        ])))
+        let label = SKLabelNode(fontNamed: "AvenirNext-Medium")
+        label.text = "danger"
+        label.fontSize = 9
+        label.fontColor = SKColor(red: 1, green: 0.35, blue: 0.48, alpha: 0.7)
+        label.position = CGPoint(x: 36, y: dangerY + 6)
+        label.zPosition = 6
+        addChild(label)
     }
 
     private func addBackdrop() {

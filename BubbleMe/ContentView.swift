@@ -278,6 +278,7 @@ struct GameContainer: View {
     var request: PlayRequest
     var onHome: () -> Void
     @StateObject private var session: GameSession
+    @State private var bagOpen = false
 
     init(profile: ProfileManager, request: PlayRequest, onHome: @escaping () -> Void) {
         self.profile = profile
@@ -291,7 +292,7 @@ struct GameContainer: View {
             SpriteView(scene: session.scene).ignoresSafeArea()
             VStack {
                 HStack {
-                    chip("\(session.score)")
+                    chip("\(session.score)", label: "Score")
                     Spacer()
                     Button("Home", action: finish)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -300,13 +301,17 @@ struct GameContainer: View {
                         .frame(height: 36)
                         .background(Palette.surface.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     Spacer()
-                    chip("\(session.shots)")
+                    if request.mode == .arcade {
+                        chip("\(session.wave)", label: "Wave")
+                    } else {
+                        chip("\(session.shots)", label: "Shots")
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
                 if request.mode == .arcade {
-                    Text("Wave \(session.wave)")
+                    Text("Play for high score · waves get harder")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(Palette.muted)
                 } else {
@@ -317,19 +322,70 @@ struct GameContainer: View {
 
                 Spacer()
 
-                HStack(spacing: 10) {
-                    PowerButton(kind: .bomb, count: session.bombs, selected: session.loaded == .bomb, photo: profile.photo) {
-                        session.load(.bomb)
+                if bagOpen {
+                    HStack(spacing: 10) {
+                        PowerButton(kind: .bomb, count: session.bombs, selected: session.loaded == .bomb, photo: profile.photo) {
+                            session.load(.bomb)
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen = false }
+                        }
+                        PowerButton(kind: .fire, count: session.fire, selected: session.loaded == .fire, photo: profile.photo) {
+                            session.load(.fire)
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen = false }
+                        }
+                        PowerButton(kind: .face, count: session.face, selected: session.loaded == .face, photo: profile.photo) {
+                            session.load(.face)
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen = false }
+                        }
                     }
-                    PowerButton(kind: .fire, count: session.fire, selected: session.loaded == .fire, photo: profile.photo) {
-                        session.load(.fire)
-                    }
-                    PowerButton(kind: .face, count: session.face, selected: session.loaded == .face, photo: profile.photo) {
-                        session.load(.face)
-                    }
+                    .padding(.horizontal, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding(.horizontal, 16)
+
+                Button {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen.toggle() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("🎒")
+                            .font(.system(size: 22))
+                        Text(bagOpen ? "Close bag" : bagLabel)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        if let loaded = session.loaded, !bagOpen {
+                            Text(loaded == .bomb ? "💣" : loaded == .fire ? "🔥" : "🙂")
+                                .font(.system(size: 18))
+                        }
+                    }
+                    .foregroundStyle(Palette.fg)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Palette.surface.opacity(0.92), in: Capsule())
+                    .overlay(Capsule().stroke(session.loaded == nil ? Palette.border : Palette.accent, lineWidth: 1.2))
+                }
+                .padding(.horizontal, 40)
                 .padding(.bottom, 18)
+            }
+
+            if session.lost {
+                Color.black.opacity(0.55).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    Text("Board full")
+                        .font(.display(28, weight: .bold))
+                    Text("The bubbles reached the line.")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                    Text("\(session.score)")
+                        .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Palette.accent)
+                    if request.mode == .arcade {
+                        Text("Wave \(session.wave)")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Palette.muted)
+                    }
+                    Button("Home", action: finish)
+                        .buttonStyle(PrimaryButton())
+                        .padding(.horizontal, 40)
+                }
+                .foregroundStyle(Palette.fg)
+                .padding(24)
             }
         }
         .statusBarHidden(true)
@@ -338,17 +394,32 @@ struct GameContainer: View {
         }
     }
 
-    private func chip(_ t: String) -> some View {
-        Text(t)
-            .font(.system(size: 18, weight: .semibold, design: .rounded).monospacedDigit())
-            .foregroundStyle(Palette.fg)
-            .padding(.horizontal, 12)
-            .frame(height: 36)
-            .background(Palette.surface.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Palette.border, lineWidth: 1)
-            )
+    private var bagLabel: String {
+        switch session.loaded {
+        case .bomb: return "Bomb loaded"
+        case .fire: return "Fire loaded"
+        case .face: return "Face loaded"
+        case nil: return "Bubble Bag"
+        }
+    }
+
+    private func chip(_ t: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .tracking(0.8)
+                .foregroundStyle(Palette.muted)
+            Text(t)
+                .font(.system(size: 18, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(Palette.fg)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Palette.surface.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Palette.border, lineWidth: 1)
+        )
     }
 
     private func finish() {
@@ -357,6 +428,9 @@ struct GameContainer: View {
         } else if session.won {
             profile.clearLevel(request.levelId)
             profile.wins += 1
+            profile.save()
+        } else if session.lost {
+            profile.losses += 1
             profile.save()
         }
         onHome()
@@ -446,6 +520,7 @@ final class GameSession: ObservableObject {
     @Published var face: Int
     @Published var loaded: PowerUp?
     @Published var won = false
+    @Published var lost = false
     @Published var wave = 1
 
     init(profile: ProfileManager, request: PlayRequest) {
@@ -478,6 +553,9 @@ final class GameSession: ObservableObject {
         }
         scene.onWin = { [weak self] in
             DispatchQueue.main.async { self?.won = true }
+        }
+        scene.onLose = { [weak self] in
+            DispatchQueue.main.async { self?.lost = true }
         }
     }
 
