@@ -55,3 +55,46 @@ struct GameCenterAuthView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController { vc }
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
+
+/// Sign-in chip on the Me tab. Tapping starts Game Center auth so progress
+/// (Bubbles, scores, cosmetics) can sync across the player's devices.
+struct GameCenterRow: View {
+    @ObservedObject private var cloud = CloudSync.shared
+
+    var body: some View {
+        Button {
+            CloudSync.shared.authenticate()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: cloud.signedIn ? "checkmark.seal.fill" : "gamecontroller.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(cloud.signedIn ? Palette.aqua : Palette.fg)
+                    .frame(width: 36, height: 36)
+                    .background(Palette.surface2, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Game Center")
+                        .font(.display(16))
+                    Text(cloud.signedIn ? cloud.playerName : "Sign in to sync across devices")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                }
+                Spacer()
+                Text(cloud.signedIn ? "On" : "Sign in")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(Palette.surface2, in: Capsule())
+                    .overlay(Capsule().stroke(Palette.border, lineWidth: 1))
+            }
+            .foregroundStyle(Palette.fg)
+            .padding(14)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Palette.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
