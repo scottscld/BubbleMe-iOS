@@ -76,7 +76,7 @@ final class Board {
 
     /// Fisher–Yates on colors only — positions stay (bubbleme.fun Shuffle).
     func shuffleColors(_ rng: inout RNG) {
-        var bubbles = all()
+        let bubbles = all()
         guard bubbles.count > 1 else { return }
         var colors = bubbles.map(\.color)
         for i in stride(from: colors.count - 1, through: 1, by: -1) {

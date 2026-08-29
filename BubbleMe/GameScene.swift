@@ -326,7 +326,7 @@ final class GameScene: SKScene {
         var x = shooter.position.x
         var y = shooter.position.y + 22
         var vx = cos(aimAngle) * 8
-        var vy = sin(aimAngle) * 8
+        let vy = sin(aimAngle) * 8
         let path = CGMutablePath()
         path.move(to: CGPoint(x: x, y: y))
         var target: GridBubble?
@@ -358,7 +358,7 @@ final class GameScene: SKScene {
         var px = shooter.position.x
         var py = shooter.position.y + 22
         var pvx = cos(aimAngle) * 8
-        var pvy = sin(aimAngle) * 8
+        let pvy = sin(aimAngle) * 8
         for j in 1...i {
             px += pvx
             py += pvy
@@ -444,8 +444,8 @@ final class GameScene: SKScene {
         let n = 8
         let wall = HexGrid.radius + 3
         for _ in 0..<n {
-            var vx = CGFloat((shot.userData?["vx"] as? NSNumber)?.doubleValue ?? 0)
-            var vy = CGFloat((shot.userData?["vy"] as? NSNumber)?.doubleValue ?? 0)
+            let vx = CGFloat((shot.userData?["vx"] as? NSNumber)?.doubleValue ?? 0)
+            let vy = CGFloat((shot.userData?["vy"] as? NSNumber)?.doubleValue ?? 0)
             let speed = hypot(vx, vy)
             guard speed > 0 else { return }
             let hunk = (speed / 60) / CGFloat(n)
@@ -990,20 +990,20 @@ final class GameScene: SKScene {
         }
 
         if let hit {
-            for n in HexGrid.neighbors(col: hit.col, row: hit.row) { consider(n.0, n.1, true) }
+            for n in HexGrid.neighbors(col: hit.col, row: hit.row) { consider(n.0, n.1, fromHit: true) }
             if scored.isEmpty {
                 for n in HexGrid.neighbors(col: hit.col, row: hit.row) {
                     guard board.get(col: n.0, row: n.1) != nil else { continue }
-                    for m in HexGrid.neighbors(col: n.0, row: n.1) { consider(m.0, m.1, false) }
+                    for m in HexGrid.neighbors(col: n.0, row: n.1) { consider(m.0, m.1, fromHit: false) }
                 }
             }
         }
         if p.y > size.height - 120 || hit == nil {
-            for c in 0..<HexGrid.colCount(0) { consider(c, 0, hit == nil) }
+            for c in 0..<HexGrid.colCount(0) { consider(c, 0, fromHit: hit == nil) }
         }
         if scored.isEmpty {
             for b in board.all() {
-                for n in HexGrid.neighbors(col: b.col, row: b.row) { consider(n.0, n.1, false) }
+                for n in HexGrid.neighbors(col: b.col, row: b.row) { consider(n.0, n.1, fromHit: false) }
             }
         }
         return scored.min(by: { $0.2 < $1.2 }).map { ($0.0, $0.1) }
