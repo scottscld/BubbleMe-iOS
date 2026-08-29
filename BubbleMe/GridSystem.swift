@@ -105,7 +105,11 @@ final class Board {
                 let nc = min(b.col, HexGrid.colCount(nr) - 1)
                 b.row = nr
                 b.col = nc
-                cells[nr][nc] = b
+                if cells[nr][nc] != nil {
+                    overflow.append(b)
+                } else {
+                    cells[nr][nc] = b
+                }
             }
         }
         return overflow
@@ -126,16 +130,17 @@ final class Board {
     }
 
     func floating() -> [GridBubble] {
-        var connected = Set<Int>()
+        var connected = Set<String>()
         var q: [(Int, Int)] = []
         for c in 0..<HexGrid.colCount(0) where get(col: c, row: 0) != nil { q.append((c, 0)) }
         var i = 0
         while i < q.count {
             let (c, r) = q[i]; i += 1
-            guard let b = get(col: c, row: r), !connected.contains(b.id) else { continue }
-            connected.insert(b.id)
+            let key = "\(c),\(r)"
+            guard get(col: c, row: r) != nil, !connected.contains(key) else { continue }
+            connected.insert(key)
             q.append(contentsOf: HexGrid.neighbors(col: c, row: r))
         }
-        return all().filter { !connected.contains($0.id) }
+        return all().filter { !connected.contains("\($0.col),\($0.row)") }
     }
 }

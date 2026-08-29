@@ -322,6 +322,7 @@ final class GameScene: SKScene {
 
     private func drawPath() {
         clearAimDots()
+        let wall = HexGrid.radius + 3
         var x = shooter.position.x
         var y = shooter.position.y + 22
         var vx = cos(aimAngle) * 8
@@ -334,8 +335,8 @@ final class GameScene: SKScene {
             x += vx
             y += vy
             i += 1
-            if x < 22 { x = 22; vx *= -1 }
-            if x > size.width - 22 { x = size.width - 22; vx *= -1 }
+            if x < wall { x = wall; vx *= -1 }
+            if x > size.width - wall { x = size.width - wall; vx *= -1 }
             path.addLine(to: CGPoint(x: x, y: y))
             if y > size.height - 80 { break }
             if let hit = bubble(at: CGPoint(x: x, y: y)) {
@@ -361,8 +362,8 @@ final class GameScene: SKScene {
         for j in 1...i {
             px += pvx
             py += pvy
-            if px < 22 { px = 22; pvx *= -1 }
-            if px > size.width - 22 { px = size.width - 22; pvx *= -1 }
+            if px < wall { px = wall; pvx *= -1 }
+            if px > size.width - wall { px = size.width - wall; pvx *= -1 }
             if j % 3 != 0 { continue }
             let t = CGFloat(j) / 110
             let dot = SKShapeNode(circleOfRadius: max(1.4, 3.1 - t * 1.4))
@@ -403,7 +404,7 @@ final class GameScene: SKScene {
         let power = powers.consume()
         if power != nil { powersUsed += 1 }
         let node = makeBubbleSprite(color: currentColor, diameter: HexGrid.diameter, name: "shot")
-        node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 26)
+        node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 22)
         node.zPosition = 9
         node.userData = [
             "vx": NSNumber(value: Double(cos(shootAngle) * 780)),
@@ -441,7 +442,7 @@ final class GameScene: SKScene {
         }
         guard let shot = flying else { return }
         let n = 8
-        let wall = HexGrid.radius + 4
+        let wall = HexGrid.radius + 3
         for _ in 0..<n {
             var vx = CGFloat((shot.userData?["vx"] as? NSNumber)?.doubleValue ?? 0)
             var vy = CGFloat((shot.userData?["vy"] as? NSNumber)?.doubleValue ?? 0)
@@ -488,6 +489,8 @@ final class GameScene: SKScene {
 
     private func land(_ shot: SKSpriteNode, near hit: GridBubble?) {
         let pos = shot.position
+        let vx = CGFloat((shot.userData?["vx"] as? NSNumber)?.doubleValue ?? 0)
+        let vy = CGFloat((shot.userData?["vy"] as? NSNumber)?.doubleValue ?? 0)
         shot.removeFromParent()
         flying = nil
         let color = BubbleColor(rawValue: shot.userData?["color"] as? String ?? "red") ?? .red
@@ -498,7 +501,7 @@ final class GameScene: SKScene {
             checkLose()
             return
         }
-        guard let cell = nearestEmptyCell(hit: hit, near: pos) else {
+        guard let cell = nearestEmptyCell(hit: hit, near: pos, vx: vx, vy: vy) else {
             finishShot()
             return
         }
@@ -576,7 +579,15 @@ final class GameScene: SKScene {
         burst(at: rest)
         for b in rest { _ = board.remove(col: b.col, row: b.row) }
         AudioEngine.shared.pop()
-        let dropped = board.floating()
+        var dropped: [GridBubble] = []
+        for _ in 0..<6 {
+            let batch = board.floating()
+            if batch.isEmpty { break }
+            for b in batch {
+                _ = board.remove(col: b.col, row: b.row)
+                dropped.append(b)
+            }
+        }
         if !dropped.isEmpty {
             Haptics.drop()
             score += dropped.count * 20 * mul
@@ -921,11 +932,18 @@ final class GameScene: SKScene {
     }
 
     private func bubble(at p: CGPoint) -> GridBubble? {
+        let limit = HexGrid.radius * 1.92
+        var best: GridBubble?
+        var bestD = limit
         for b in board.all() {
             let pos = position(of: b)
-            if hypot(p.x - pos.x, p.y - pos.y) < HexGrid.diameter * 0.88 { return b }
+            let d = hypot(p.x - pos.x, p.y - pos.y)
+            if d < bestD {
+                bestD = d
+                best = b
+            }
         }
-        return nil
+        return best
     }
 
     private func nearest(to p: CGPoint) -> GridBubble? {
@@ -935,31 +953,60 @@ final class GameScene: SKScene {
         }
     }
 
-    /// Web-style landing: neighbors of the hit, then any empty neighbor of the board, then any empty cell.
-    private func nearestEmptyCell(hit: GridBubble?, near p: CGPoint) -> (col: Int, row: Int)? {
-        var candidates: [(Int, Int, CGFloat)] = []
-        func consider(_ c: Int, _ r: Int) {
-            guard board.inBounds(col: c, row: r), board.get(col: c, row: r) == nil else { return }
-            let pos = position(ofCol: c, row: r)
-            candidates.append((c, r, hypot(p.x - pos.x, p.y - pos.y)))
-        }
+    /// Stick to an empty hex neighbor of the bubble we actually hit — never a hole in the middle of the board.
+    private func nearestEmptyCell(hit: GridBubble?, near p: CGPoint, vx: CGFloat = 0, vy: CGFloat = 0) -> (col: Int, row: Int)? {
+        let contact: CGPoint
         if let hit {
-            for n in HexGrid.neighbors(col: hit.col, row: hit.row) { consider(n.0, n.1) }
+            let hc = position(of: hit)
+            let spd = hypot(vx, vy)
+            if spd > 1 {
+                contact = CGPoint(x: hc.x - (vx / spd) * HexGrid.diameter, y: hc.y - (vy / spd) * HexGrid.diameter)
+            } else {
+                let dx = p.x - hc.x, dy = p.y - hc.y
+                let d = hypot(dx, dy)
+                if d < 0.5 {
+                    contact = p
+                } else {
+                    contact = CGPoint(x: hc.x + (dx / d) * HexGrid.diameter, y: hc.y + (dy / d) * HexGrid.diameter)
+                }
+            }
+        } else {
+            contact = p
         }
-        if p.y > size.height - 120 {
-            for c in 0..<HexGrid.colCount(0) { consider(c, 0) }
+
+        var scored: [(Int, Int, CGFloat, Bool)] = []
+        func consider(_ c: Int, _ r: Int, fromHit: Bool) {
+            guard board.inBounds(col: c, row: r), board.get(col: c, row: r) == nil else { return }
+            if scored.contains(where: { $0.0 == c && $0.1 == r }) { return }
+            let pos = position(ofCol: c, row: r)
+            var score = hypot(contact.x - pos.x, contact.y - pos.y)
+            if let hit, hypot(vx, vy) > 1 {
+                let hc = position(of: hit)
+                let dot = (pos.x - hc.x) * vx + (pos.y - hc.y) * vy
+                if dot > 0 { score += HexGrid.diameter }
+            }
+            if !fromHit { score += HexGrid.radius }
+            scored.append((c, r, score, fromHit))
         }
-        if candidates.isEmpty {
+
+        if let hit {
+            for n in HexGrid.neighbors(col: hit.col, row: hit.row) { consider(n.0, n.1, true) }
+            if scored.isEmpty {
+                for n in HexGrid.neighbors(col: hit.col, row: hit.row) {
+                    guard board.get(col: n.0, row: n.1) != nil else { continue }
+                    for m in HexGrid.neighbors(col: n.0, row: n.1) { consider(m.0, m.1, false) }
+                }
+            }
+        }
+        if p.y > size.height - 120 || hit == nil {
+            for c in 0..<HexGrid.colCount(0) { consider(c, 0, hit == nil) }
+        }
+        if scored.isEmpty {
             for b in board.all() {
-                for n in HexGrid.neighbors(col: b.col, row: b.row) { consider(n.0, n.1) }
+                for n in HexGrid.neighbors(col: b.col, row: b.row) { consider(n.0, n.1, false) }
             }
         }
-        if candidates.isEmpty {
-            for r in 0..<board.maxRows {
-                for c in 0..<HexGrid.colCount(r) { consider(c, r) }
-            }
-        }
-        return candidates.min(by: { $0.2 < $1.2 }).map { ($0.0, $0.1) }
+        return scored.min(by: { $0.2 < $1.2 }).map { ($0.0, $0.1) }
     }
 
     private func addDangerLine() {
