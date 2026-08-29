@@ -16,6 +16,11 @@
 		AA0100000000000000000007 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000007 /* Haptics.swift */; };
 		AA0100000000000000000008 /* FriendsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000008 /* FriendsManager.swift */; };
 		AA0100000000000000000009 /* BattleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000009 /* BattleManager.swift */; };
+		AA0100000000000000000010 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000010 /* Theme.swift */; };
+		AA0100000000000000000011 /* ArcadeWeek.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000011 /* ArcadeWeek.swift */; };
+		AA0100000000000000000012 /* LevelsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000012 /* LevelsCatalog.swift */; };
+		AA0100000000000000000013 /* BubbleArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000013 /* BubbleArt.swift */; };
+		AA0100000000000000000014 /* HubScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000014 /* HubScreens.swift */; };
 		AA010000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000A /* Assets.xcassets */; };
 		AA010000000000000000000B /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000B /* SpriteKit.framework */; };
 		AA010000000000000000000C /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000C /* UserNotifications.framework */; };
@@ -31,6 +36,11 @@
 		AA0200000000000000000007 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		AA0200000000000000000008 /* FriendsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsManager.swift; sourceTree = "<group>"; };
 		AA0200000000000000000009 /* BattleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BattleManager.swift; sourceTree = "<group>"; };
+		AA0200000000000000000010 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AA0200000000000000000011 /* ArcadeWeek.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcadeWeek.swift; sourceTree = "<group>"; };
+		AA0200000000000000000012 /* LevelsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelsCatalog.swift; sourceTree = "<group>"; };
+		AA0200000000000000000013 /* BubbleArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleArt.swift; sourceTree = "<group>"; };
+		AA0200000000000000000014 /* HubScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HubScreens.swift; sourceTree = "<group>"; };
 		AA020000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA020000000000000000000B /* SpriteKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SpriteKit.framework; path = System/Library/Frameworks/SpriteKit.framework; sourceTree = SDKROOT; };
 		AA020000000000000000000C /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
@@ -72,6 +82,11 @@
 				AA0200000000000000000007 /* Haptics.swift */,
 				AA0200000000000000000008 /* FriendsManager.swift */,
 				AA0200000000000000000009 /* BattleManager.swift */,
+				AA0200000000000000000010 /* Theme.swift */,
+				AA0200000000000000000011 /* ArcadeWeek.swift */,
+				AA0200000000000000000012 /* LevelsCatalog.swift */,
+				AA0200000000000000000013 /* BubbleArt.swift */,
+				AA0200000000000000000014 /* HubScreens.swift */,
 				AA020000000000000000000A /* Assets.xcassets */,
 				AA020000000000000000000D /* Info.plist */,
 			);
@@ -173,6 +188,11 @@
 				AA0100000000000000000007 /* Haptics.swift in Sources */,
 				AA0100000000000000000008 /* FriendsManager.swift in Sources */,
 				AA0100000000000000000009 /* BattleManager.swift in Sources */,
+				AA0100000000000000000010 /* Theme.swift in Sources */,
+				AA0100000000000000000011 /* ArcadeWeek.swift in Sources */,
+				AA0100000000000000000012 /* LevelsCatalog.swift in Sources */,
+				AA0100000000000000000013 /* BubbleArt.swift in Sources */,
+				AA0100000000000000000014 /* HubScreens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

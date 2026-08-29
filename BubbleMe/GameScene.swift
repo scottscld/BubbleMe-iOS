@@ -1,28 +1,41 @@
 import SpriteKit
 
+enum PlayMode { case arcade, level, battle }
+
 /// Core match-3 bubble shooter. Aim, bounce, stick, pop, drop.
 final class GameScene: SKScene {
     let board = Board()
     let powers: PowerUpSystem
     weak var profile: ProfileManager?
     var onHud: ((Int, Int, Int) -> Void)?
+    var onWin: (() -> Void)?
+    var mode: PlayMode = .arcade
+    var levelId = 1
+    var seed: Int = 1
+    var wave = 1
 
     private var shooter: SKNode!
-    private var cannon: SKShapeNode!
-    private var nextDot: SKShapeNode!
+    private var cannon: SKSpriteNode!
+    private var nextDot: SKSpriteNode!
     private var currentColor: BubbleColor = .red
     private var nextColor: BubbleColor = .amber
     private var aimAngle: CGFloat = -.pi / 2
     private var lastAim: CGFloat = -.pi / 2
     private var trajectory = SKShapeNode()
-    private var flying: SKShapeNode?
+    private var flying: SKSpriteNode?
     private var score = 0
     private var shotsLeft = 24
     private var dropIn = 5
     private var pausedGame = false
+    private var won = false
+    private var rng: RNG = RNG(seed: 1)
 
-    init(size: CGSize, inventory: Inventory) {
+    init(size: CGSize, inventory: Inventory, seed: Int, mode: PlayMode, levelId: Int) {
         self.powers = PowerUpSystem(inventory: inventory)
+        self.seed = seed
+        self.mode = mode
+        self.levelId = levelId
+        self.rng = RNG(seed: seed)
         super.init(size: size)
         scaleMode = .resizeFill
         backgroundColor = SKColor(red: 0.03, green: 0.04, blue: 0.08, alpha: 1)
@@ -33,39 +46,47 @@ final class GameScene: SKScene {
     override func didMove(to view: SKView) {
         Haptics.prepare()
         if childNode(withName: "shooter") != nil { return }
-
+        addBackdrop()
         shooter = SKNode()
         shooter.name = "shooter"
-        shooter.position = CGPoint(x: size.width / 2, y: 108)
+        shooter.position = CGPoint(x: size.width / 2, y: 118)
         addChild(shooter)
 
-        cannon = SKShapeNode(circleOfRadius: HexGrid.radius + 3)
-        cannon.fillColor = skColor(currentColor)
-        cannon.strokeColor = .white
-        cannon.lineWidth = 2
+        let d = HexGrid.diameter
+        cannon = BubbleArt.sprite(color: currentColor, diameter: d + 8, name: "cannon")
         shooter.addChild(cannon)
+        if let photo = profile?.photo {
+            cannon.texture = SKTexture(image: BubbleArt.render(color: BubbleArt.uiColor(currentColor), size: (d + 8) * UIScreen.main.scale, photo: photo))
+        }
 
-        nextDot = SKShapeNode(circleOfRadius: 9)
-        nextDot.fillColor = skColor(nextColor)
-        nextDot.strokeColor = SKColor.white.withAlphaComponent(0.5)
-        nextDot.position = CGPoint(x: 42, y: -6)
+        nextDot = BubbleArt.sprite(color: nextColor, diameter: 20, name: "next")
+        nextDot.position = CGPoint(x: 46, y: -8)
         shooter.addChild(nextDot)
 
-        trajectory.strokeColor = SKColor.white.withAlphaComponent(0.75)
-        trajectory.lineWidth = 2
-        trajectory.glowWidth = 1
+        trajectory.strokeColor = SKColor.white.withAlphaComponent(0.78)
+        trajectory.lineWidth = 2.4
+        trajectory.glowWidth = 2
         addChild(trajectory)
 
-        seedBoard()
+        seedBoard(wave: 1)
         redrawBoard()
         onHud?(score, shotsLeft, dropIn)
     }
 
-    func seedBoard() {
-        let palette = Array(BubbleColor.allCases.prefix(4))
-        for row in 0..<6 {
+    func seedBoard(wave: Int) {
+        self.wave = wave
+        let colors = min(6, 4 + (wave - 1) / 2 + (mode == .level ? levelId / 80 : 0))
+        let palette = Array(BubbleColor.allCases.prefix(max(3, colors)))
+        let rows = min(8, 5 + wave / 2 + (mode == .level ? (levelId / 100) : 0))
+        rng = RNG(seed: seed &+ wave &* 9973)
+        for row in 0..<rows {
             for col in 0..<HexGrid.colCount(row) {
-                _ = board.spawn(col: col, row: row, color: palette[(col + row * 2) % palette.count])
+                // hollow-ish boards on some levels
+                if mode == .level, levelId % 7 == 0, row > 0, row < rows - 1, col > 0, col < HexGrid.colCount(row) - 1, rng.next() % 4 == 0 {
+                    continue
+                }
+                let color = palette[Int(rng.next() % UInt64(palette.count))]
+                _ = board.spawn(col: col, row: row, color: color)
             }
         }
     }
@@ -102,7 +123,7 @@ final class GameScene: SKScene {
 
     private func drawPath() {
         var x = shooter.position.x
-        var y = shooter.position.y + 20
+        var y = shooter.position.y + 22
         var vx = cos(aimAngle) * 8
         var vy = sin(aimAngle) * 8
         let path = CGMutablePath()
@@ -110,8 +131,8 @@ final class GameScene: SKScene {
         for _ in 0..<90 {
             x += vx
             y += vy
-            if x < 20 { x = 20; vx *= -1 }
-            if x > size.width - 20 { x = size.width - 20; vx *= -1 }
+            if x < 22 { x = 22; vx *= -1 }
+            if x > size.width - 22 { x = size.width - 22; vx *= -1 }
             path.addLine(to: CGPoint(x: x, y: y))
             if y > size.height - 80 { break }
         }
@@ -119,13 +140,10 @@ final class GameScene: SKScene {
     }
 
     private func fire() {
-        guard flying == nil, !pausedGame else { return }
+        guard flying == nil, !pausedGame, !won else { return }
         let power = powers.consume()
-        let node = SKShapeNode(circleOfRadius: HexGrid.radius)
-        node.fillColor = skColor(currentColor)
-        node.strokeColor = .white
-        node.lineWidth = 1
-        node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 24)
+        let node = BubbleArt.sprite(color: currentColor, diameter: HexGrid.diameter, name: "shot")
+        node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 26)
         node.userData = [
             "vx": NSNumber(value: Double(cos(aimAngle) * 780)),
             "vy": NSNumber(value: Double(sin(aimAngle) * 780)),
@@ -138,10 +156,14 @@ final class GameScene: SKScene {
         dropIn -= 1
         Haptics.shoot()
         currentColor = nextColor
-        nextColor = BubbleColor.allCases.randomElement() ?? .red
-        cannon.fillColor = skColor(currentColor)
-        nextDot.fillColor = skColor(nextColor)
+        nextColor = BubbleColor.allCases[Int(rng.next() % 6)]
+        cannon.texture = BubbleArt.texture(for: currentColor, diameter: (HexGrid.diameter + 8) * UIScreen.main.scale)
+        nextDot.texture = BubbleArt.texture(for: nextColor, diameter: 20 * UIScreen.main.scale)
         onHud?(score, shotsLeft, dropIn)
+        if dropIn <= 0 {
+            dropIn = max(3, 6 - wave)
+            dropCeiling()
+        }
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -150,13 +172,13 @@ final class GameScene: SKScene {
         let vy = CGFloat((shot.userData?["vy"] as? NSNumber)?.doubleValue ?? 0)
         shot.position.x += vx / 60
         shot.position.y += vy / 60
-        if shot.position.x < 20 {
+        if shot.position.x < 22 {
             shot.userData?["vx"] = NSNumber(value: Double(-vx))
-            shot.position.x = 20
+            shot.position.x = 22
         }
-        if shot.position.x > size.width - 20 {
+        if shot.position.x > size.width - 22 {
             shot.userData?["vx"] = NSNumber(value: Double(-vx))
-            shot.position.x = size.width - 20
+            shot.position.x = size.width - 22
         }
         let power = shot.userData?["power"] as? String ?? ""
         if power == "fire" {
@@ -174,7 +196,7 @@ final class GameScene: SKScene {
         }
     }
 
-    private func land(_ shot: SKShapeNode, near hit: GridBubble?) {
+    private func land(_ shot: SKSpriteNode, near hit: GridBubble?) {
         shot.removeFromParent()
         flying = nil
         let color = BubbleColor(rawValue: shot.userData?["color"] as? String ?? "red") ?? .red
@@ -209,38 +231,51 @@ final class GameScene: SKScene {
         case .fire: Haptics.fire()
         case .face: Haptics.face()
         }
-        score += bubbles.count * 10
+        let mul = mode == .arcade ? wave : 1
+        score += bubbles.count * 10 * mul
         burst(at: bubbles)
         for b in bubbles { _ = board.remove(col: b.col, row: b.row) }
         let dropped = board.floating()
         if !dropped.isEmpty {
             Haptics.drop()
-            score += dropped.count * 20
+            score += dropped.count * 20 * mul
             for b in dropped { _ = board.remove(col: b.col, row: b.row) }
         }
         powers.award(forCombo: bubbles.count + dropped.count)
         redrawBoard()
         onHud?(score, shotsLeft, dropIn)
-        if board.all().isEmpty { Haptics.win() }
+        if board.all().isEmpty {
+            if mode == .arcade {
+                wave += 1
+                seedBoard(wave: wave)
+                shotsLeft += 8
+                redrawBoard()
+                Haptics.win()
+            } else {
+                won = true
+                Haptics.win()
+                onWin?()
+            }
+        }
+    }
+
+    private func dropCeiling() {
+        // shift every bubble down one row (simple pressure)
+        let all = board.all().sorted { $0.row > $1.row }
+        for b in all {
+            _ = board.remove(col: b.col, row: b.row)
+            _ = board.spawn(col: min(b.col, HexGrid.colCount(b.row + 1) - 1), row: min(board.maxRows - 1, b.row + 1), color: b.color)
+        }
+        redrawBoard()
     }
 
     private func burst(at bubbles: [GridBubble]) {
-        let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
         for b in bubbles.prefix(18) {
-            let spark = SKShapeNode(circleOfRadius: 4)
-            spark.fillColor = skColor(b.color)
-            spark.strokeColor = .clear
-            let xOff: CGFloat = b.row % 2 == 1 ? HexGrid.radius : 0
-            spark.position = CGPoint(
-                x: ox + CGFloat(b.col) * HexGrid.diameter + HexGrid.radius + xOff,
-                y: size.height - 80 - CGFloat(b.row) * HexGrid.rowH
-            )
+            let spark = BubbleArt.sprite(color: b.color, diameter: 10, name: "spark")
+            spark.position = position(of: b)
             addChild(spark)
             spark.run(.sequence([
-                .group([
-                    .scale(to: 2.2, duration: 0.22),
-                    .fadeOut(withDuration: 0.22),
-                ]),
+                .group([.scale(to: 2.4, duration: 0.22), .fadeOut(withDuration: 0.22)]),
                 .removeFromParent(),
             ]))
         }
@@ -248,55 +283,33 @@ final class GameScene: SKScene {
 
     private func redrawBoard() {
         enumerateChildNodes(withName: "cell") { n, _ in n.removeFromParent() }
-        let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
         for b in board.all() {
-            let node = SKShapeNode(circleOfRadius: HexGrid.radius - 0.5)
-            node.name = "cell"
-            node.fillColor = skColor(b.color)
-            node.strokeColor = SKColor.white.withAlphaComponent(0.35)
-            node.lineWidth = 1
-            let xOff: CGFloat = b.row % 2 == 1 ? HexGrid.radius : 0
-            node.position = CGPoint(
-                x: ox + CGFloat(b.col) * HexGrid.diameter + HexGrid.radius + xOff,
-                y: size.height - 80 - CGFloat(b.row) * HexGrid.rowH
-            )
+            let node = BubbleArt.sprite(color: b.color, diameter: HexGrid.diameter - 1)
+            node.position = position(of: b)
             addChild(node)
         }
     }
 
-    private func skColor(_ c: BubbleColor) -> SKColor {
-        switch c {
-        case .red: return SKColor(red: 1, green: 0.35, blue: 0.48, alpha: 1)
-        case .amber: return SKColor(red: 1, green: 0.69, blue: 0.13, alpha: 1)
-        case .lime: return SKColor(red: 0.35, green: 0.84, blue: 0.29, alpha: 1)
-        case .azure: return SKColor(red: 0.23, green: 0.63, blue: 1, alpha: 1)
-        case .violet: return SKColor(red: 0.61, green: 0.42, blue: 1, alpha: 1)
-        case .aqua: return SKColor(red: 0.18, green: 0.90, blue: 0.77, alpha: 1)
-        }
+    private func position(of b: GridBubble) -> CGPoint {
+        let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
+        let xOff: CGFloat = b.row % 2 == 1 ? HexGrid.radius : 0
+        return CGPoint(
+            x: ox + CGFloat(b.col) * HexGrid.diameter + HexGrid.radius + xOff,
+            y: size.height - 88 - CGFloat(b.row) * HexGrid.rowH
+        )
     }
 
     private func bubble(at p: CGPoint) -> GridBubble? {
-        let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
         for b in board.all() {
-            let xOff: CGFloat = b.row % 2 == 1 ? HexGrid.radius : 0
-            let x = ox + CGFloat(b.col) * HexGrid.diameter + HexGrid.radius + xOff
-            let y = size.height - 80 - CGFloat(b.row) * HexGrid.rowH
-            if hypot(p.x - x, p.y - y) < HexGrid.diameter * 0.9 { return b }
+            let pos = position(of: b)
+            if hypot(p.x - pos.x, p.y - pos.y) < HexGrid.diameter * 0.9 { return b }
         }
         return nil
     }
 
     private func nearest(to p: CGPoint) -> GridBubble? {
-        let ox = (size.width - CGFloat(HexGrid.cols) * HexGrid.diameter) / 2
-        return board.all().min { a, b in
-            func pos(_ g: GridBubble) -> CGPoint {
-                let xOff: CGFloat = g.row % 2 == 1 ? HexGrid.radius : 0
-                return CGPoint(
-                    x: ox + CGFloat(g.col) * HexGrid.diameter + HexGrid.radius + xOff,
-                    y: size.height - 80 - CGFloat(g.row) * HexGrid.rowH
-                )
-            }
-            let pa = pos(a), pb = pos(b)
+        board.all().min { a, b in
+            let pa = position(of: a), pb = position(of: b)
             return hypot(p.x - pa.x, p.y - pa.y) < hypot(p.x - pb.x, p.y - pb.y)
         }
     }
@@ -305,8 +318,52 @@ final class GameScene: SKScene {
         if let hit {
             let options = HexGrid.neighbors(col: hit.col, row: hit.row)
                 .filter { board.get(col: $0.0, row: $0.1) == nil && board.inBounds(col: $0.0, row: $0.1) }
-            if let best = options.first { return (best.0, best.1) }
+            if let best = options.min(by: { a, b in
+                let pa = CGPoint(x: CGFloat(a.0), y: CGFloat(a.1))
+                let pb = CGPoint(x: CGFloat(b.0), y: CGFloat(b.1))
+                return hypot(p.x - pa.x, p.y - pa.y) < hypot(p.x - pb.x, p.y - pb.y)
+            }) { return (best.0, best.1) }
         }
         return (HexGrid.cols / 2, 0)
+    }
+
+    private func addBackdrop() {
+        if let img = UIImage(named: "Twilight") {
+            let bg = SKSpriteNode(texture: SKTexture(image: img))
+            bg.size = size
+            bg.position = CGPoint(x: size.width / 2, y: size.height / 2)
+            bg.zPosition = -20
+            bg.alpha = 0.55
+            addChild(bg)
+        }
+        let dim = SKSpriteNode(color: SKColor(red: 0.03, green: 0.04, blue: 0.08, alpha: 0.45), size: size)
+        dim.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        dim.zPosition = -19
+        addChild(dim)
+        for _ in 0..<40 {
+            let star = SKShapeNode(circleOfRadius: CGFloat.random(in: 0.6...1.6))
+            star.fillColor = .white
+            star.strokeColor = .clear
+            star.alpha = CGFloat.random(in: 0.25...0.8)
+            star.position = CGPoint(x: .random(in: 0...size.width), y: .random(in: 0...size.height))
+            star.zPosition = -18
+            addChild(star)
+            star.run(.repeatForever(.sequence([
+                .fadeAlpha(to: 0.15, duration: Double.random(in: 0.8...1.8)),
+                .fadeAlpha(to: 0.85, duration: Double.random(in: 0.8...1.8)),
+            ])))
+        }
+    }
+}
+
+struct RNG {
+    private var state: UInt64
+    init(seed: Int) { state = UInt64(truncatingIfNeeded: seed) | 1 }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
     }
 }

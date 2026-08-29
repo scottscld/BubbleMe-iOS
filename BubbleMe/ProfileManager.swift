@@ -10,6 +10,12 @@ final class ProfileManager: ObservableObject {
     @Published var musicEnabled = true
     @Published var sfxEnabled = true
     @Published var inventory = Inventory(bombs: 3, fireballs: 3, faceBalls: 1)
+    @Published var wins = 0
+    @Published var losses = 0
+    @Published var coins = 0
+    @Published var highestLevel = 1
+    @Published var arcadeBest = 0
+    @Published var arcadeWeek = ""
 
     private let key = "bubbleme.profile"
 
@@ -17,6 +23,7 @@ final class ProfileManager: ObservableObject {
         load()
         if friendCode.isEmpty { friendCode = Self.makeCode() }
         Haptics.enabled = hapticEnabled
+        rotateArcadeIfNeeded()
     }
 
     func setHaptic(_ on: Bool) {
@@ -28,6 +35,27 @@ final class ProfileManager: ObservableObject {
     func importPhoto(_ image: UIImage) {
         photo = Self.circleCrop(image, size: 192)
         save()
+    }
+
+    func clearLevel(_ id: Int) {
+        if id >= highestLevel { highestLevel = min(LevelsCatalog.count, id + 1) }
+        coins += 8
+        save()
+    }
+
+    func recordArcade(score: Int) {
+        rotateArcadeIfNeeded()
+        if score > arcadeBest { arcadeBest = score }
+        save()
+    }
+
+    func rotateArcadeIfNeeded() {
+        let week = ArcadeWeek.weekId()
+        if arcadeWeek != week {
+            arcadeWeek = week
+            arcadeBest = 0
+            save()
+        }
     }
 
     static func circleCrop(_ image: UIImage, size: CGFloat) -> UIImage {
@@ -59,6 +87,12 @@ final class ProfileManager: ObservableObject {
         musicEnabled = decoded.music
         sfxEnabled = decoded.sfx
         inventory = decoded.inventory
+        wins = decoded.wins
+        losses = decoded.losses
+        coins = decoded.coins
+        highestLevel = max(1, decoded.highestLevel)
+        arcadeBest = decoded.arcadeBest
+        arcadeWeek = decoded.arcadeWeek
         if let jpeg = decoded.photo, let img = UIImage(data: jpeg) { photo = img }
     }
 
@@ -70,7 +104,13 @@ final class ProfileManager: ObservableObject {
             music: musicEnabled,
             sfx: sfxEnabled,
             inventory: inventory,
-            photo: photo?.jpegData(compressionQuality: 0.72)
+            photo: photo?.jpegData(compressionQuality: 0.72),
+            wins: wins,
+            losses: losses,
+            coins: coins,
+            highestLevel: highestLevel,
+            arcadeBest: arcadeBest,
+            arcadeWeek: arcadeWeek
         )
         if let data = try? JSONEncoder().encode(save) {
             UserDefaults.standard.set(data, forKey: key)
@@ -85,5 +125,11 @@ final class ProfileManager: ObservableObject {
         var sfx: Bool
         var inventory: Inventory
         var photo: Data?
+        var wins: Int = 0
+        var losses: Int = 0
+        var coins: Int = 0
+        var highestLevel: Int = 1
+        var arcadeBest: Int = 0
+        var arcadeWeek: String = ""
     }
 }

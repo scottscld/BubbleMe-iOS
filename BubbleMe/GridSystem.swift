@@ -15,7 +15,7 @@ struct GridBubble: Identifiable, Codable {
 
 enum HexGrid {
     static let cols = 8
-    static let radius: CGFloat = 17
+    static let radius: CGFloat = 19
     static var diameter: CGFloat { radius * 2 }
     static var rowH: CGFloat { diameter * 0.866 }
 
