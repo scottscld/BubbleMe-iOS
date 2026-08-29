@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var picker: PhotosPickerItem?
     @State private var showSettings = false
     @State private var showBoard = false
+    @State private var showCustomize = false
 
     var body: some View {
         ZStack {
@@ -37,6 +38,7 @@ struct ContentView: View {
                                 picker: $picker,
                                 showSettings: $showSettings,
                                 showBoard: $showBoard,
+                                showCustomize: $showCustomize,
                                 onArcade: startArcade,
                                 onLevel: { startLevel(profile.highestLevel) }
                             )
@@ -70,6 +72,10 @@ struct ContentView: View {
         .sheet(isPresented: $showBoard) {
             ArcadeBoardSheet(best: profile.arcadeBest)
         }
+        .sheet(isPresented: $showCustomize) {
+            CustomizeHub(profile: profile)
+        }
+        .onAppear { profile.notePlay() }
     }
 
     private func startArcade() {
@@ -91,6 +97,7 @@ struct HomeHub: View {
     @Binding var picker: PhotosPickerItem?
     @Binding var showSettings: Bool
     @Binding var showBoard: Bool
+    @Binding var showCustomize: Bool
     var onArcade: () -> Void
     var onLevel: () -> Void
 
@@ -110,12 +117,18 @@ struct HomeHub: View {
                     }
                     Spacer()
                     HStack(spacing: 8) {
-                        Text("Guest")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        Button { showCustomize = true } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "circle.fill")
+                                Text("\(profile.bubbles)")
+                            }
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(Palette.aqua)
                             .padding(.horizontal, 12)
                             .frame(height: 40)
                             .background(Palette.surface.opacity(0.9), in: Capsule())
                             .overlay(Capsule().stroke(Palette.border, lineWidth: 1))
+                        }
                         Button {
                             showSettings = true
                         } label: {
@@ -162,7 +175,10 @@ struct HomeHub: View {
                     }
                     .buttonStyle(SecondaryButton())
 
-                    Text("\(profile.username.isEmpty ? "Guest" : profile.username) · \(profile.wins)W \(profile.losses)L · \(profile.coins) coins")
+                    Button("Customize shooter") { showCustomize = true }
+                        .buttonStyle(SecondaryButton())
+
+                    Text("\(profile.username.isEmpty ? "Guest" : profile.username) · \(profile.wins)W \(profile.losses)L · \(profile.bubbles) Bubbles")
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(Palette.muted)
                         .padding(.top, 2)
@@ -323,36 +339,43 @@ struct GameContainer: View {
                 Spacer()
 
                 if bagOpen {
-                    HStack(spacing: 10) {
-                        PowerButton(kind: .bomb, count: session.bombs, selected: session.loaded == .bomb, photo: profile.photo) {
-                            session.load(.bomb)
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen = false }
+                    TabView {
+                        HStack(spacing: 10) {
+                            PowerButton(kind: .bomb, count: session.bombs, selected: session.loaded == .bomb, photo: profile.photo) {
+                                session.load(.bomb)
+                            }
+                            PowerButton(kind: .fire, count: session.fire, selected: session.loaded == .fire, photo: profile.photo) {
+                                session.load(.fire)
+                            }
+                            PowerButton(kind: .face, count: session.face, selected: session.loaded == .face, photo: profile.photo) {
+                                session.load(.face)
+                            }
                         }
-                        PowerButton(kind: .fire, count: session.fire, selected: session.loaded == .fire, photo: profile.photo) {
-                            session.load(.fire)
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen = false }
+                        .padding(.horizontal, 16)
+                        HStack(spacing: 10) {
+                            BattleChip(title: "ZigZag", icon: "〰️", count: session.zigzag) { session.useBattle(.zigzag) }
+                            BattleChip(title: "Mirror", icon: "🪞", count: session.mirror) { session.useBattle(.mirror) }
+                            BattleChip(title: "Shuffle", icon: "🔀", count: session.shuffle) { session.useBattle(.shuffle) }
                         }
-                        PowerButton(kind: .face, count: session.face, selected: session.loaded == .face, photo: profile.photo) {
-                            session.load(.face)
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen = false }
-                        }
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.horizontal, 16)
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+                    .frame(height: 96)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 Button {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { bagOpen.toggle() }
                 } label: {
-                    HStack(spacing: 10) {
-                        Text("🎒")
-                            .font(.system(size: 22))
-                        Text(bagOpen ? "Close bag" : bagLabel)
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        if let loaded = session.loaded, !bagOpen {
-                            Text(loaded == .bomb ? "💣" : loaded == .fire ? "🔥" : "🙂")
-                                .font(.system(size: 18))
-                        }
+                    HStack(spacing: 12) {
+                        Text("🎒").font(.system(size: 20))
+                        bagIcon("💣", session.bombs)
+                        bagIcon("🔥", session.fire)
+                        bagIcon("🙂", session.face)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Palette.muted)
+                            .opacity(0.7)
                     }
                     .foregroundStyle(Palette.fg)
                     .frame(maxWidth: .infinity)
@@ -360,8 +383,33 @@ struct GameContainer: View {
                     .background(Palette.surface.opacity(0.92), in: Capsule())
                     .overlay(Capsule().stroke(session.loaded == nil ? Palette.border : Palette.accent, lineWidth: 1.2))
                 }
-                .padding(.horizontal, 40)
+                .padding(.horizontal, 24)
                 .padding(.bottom, 18)
+            }
+
+            if let wave = session.waveBanner, !session.lost {
+                Color.black.opacity(0.4).ignoresSafeArea()
+                VStack(spacing: 10) {
+                    Text("WAVE \(wave)")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .tracking(3)
+                        .foregroundStyle(Palette.aqua)
+                    Text(waveCopy(wave))
+                        .font(.display(28, weight: .bold))
+                        .multilineTextAlignment(.center)
+                    Text("Board cleared · keep popping")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(Palette.muted)
+                    Text("\(session.score)")
+                        .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+                    Button("Let’s go") { session.waveBanner = nil }
+                        .buttonStyle(PrimaryButton())
+                        .padding(.horizontal, 40)
+                }
+                .foregroundStyle(Palette.fg)
+                .padding(24)
+                .background(Palette.surface.opacity(0.95), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .padding(28)
             }
 
             if session.lost {
@@ -391,6 +439,26 @@ struct GameContainer: View {
         .statusBarHidden(true)
         .onChange(of: session.won) { _, won in
             if won { finish() }
+        }
+        .onChange(of: session.waveBanner) { _, banner in
+            session.scene.isPaused = banner != nil
+        }
+    }
+
+    private func waveCopy(_ w: Int) -> String {
+        switch w % 5 {
+        case 2: return "Nice clear!"
+        case 3: return "You’re on fire!"
+        case 4: return "Unstoppable."
+        default: return "Keep going!"
+        }
+    }
+
+    private func bagIcon(_ emoji: String, _ n: Int) -> some View {
+        HStack(spacing: 3) {
+            Text(emoji)
+            Text("\(n)")
+                .font(.system(size: 14, weight: .bold, design: .rounded).monospacedDigit())
         }
     }
 
@@ -423,6 +491,8 @@ struct GameContainer: View {
     }
 
     private func finish() {
+        profile.inventory = session.scene.powers.inventory
+        profile.save()
         if request.mode == .arcade {
             profile.recordArcade(score: session.score)
         } else if session.won {
@@ -522,6 +592,10 @@ final class GameSession: ObservableObject {
     @Published var won = false
     @Published var lost = false
     @Published var wave = 1
+    @Published var waveBanner: Int? = nil
+    @Published var zigzag = 1
+    @Published var mirror = 1
+    @Published var shuffle = 1
 
     init(profile: ProfileManager, request: PlayRequest) {
         bombs = profile.inventory.bombs
@@ -557,11 +631,58 @@ final class GameSession: ObservableObject {
         scene.onLose = { [weak self] in
             DispatchQueue.main.async { self?.lost = true }
         }
+        scene.onWave = { [weak self] wave, score in
+            DispatchQueue.main.async {
+                self?.wave = wave
+                self?.score = score
+                self?.waveBanner = wave
+            }
+        }
+        scene.onPickup = { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let inv = self.scene.powers.inventory
+                self.bombs = inv.bombs
+                self.fire = inv.fireballs
+                self.face = inv.faceBalls
+            }
+        }
+        profile.notePlay()
     }
 
     func load(_ power: PowerUp) {
         scene.loadPower(power)
         loaded = scene.powers.loaded
         Haptics.aimTick()
+    }
+
+    func useBattle(_ p: BattlePower) {
+        scene.useBattle(p)
+        zigzag = scene.powers.battle.zigzag
+        mirror = scene.powers.battle.mirror
+        shuffle = scene.powers.battle.shuffle
+        Haptics.aimTick()
+    }
+}
+
+private struct BattleChip: View {
+    let title: String
+    let icon: String
+    let count: Int
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Text(icon).font(.system(size: 22))
+                Text(title).font(.system(size: 11, weight: .semibold, design: .rounded))
+                Text("\(count)").font(.system(size: 14, weight: .bold, design: .rounded).monospacedDigit())
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 72)
+            .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .foregroundStyle(.white)
+        .disabled(count <= 0)
+        .opacity(count <= 0 ? 0.4 : 1)
     }
 }

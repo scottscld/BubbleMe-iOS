@@ -10,6 +10,8 @@ final class GameScene: SKScene {
     var onHud: ((Int, Int, Int) -> Void)?
     var onWin: (() -> Void)?
     var onLose: (() -> Void)?
+    var onWave: ((Int, Int) -> Void)?
+    var onPickup: ((PowerUp) -> Void)?
     var mode: PlayMode = .arcade
     var levelId = 1
     var seed: Int = 1
@@ -62,15 +64,14 @@ final class GameScene: SKScene {
         addDangerLine()
 
         let d = HexGrid.diameter
-        cannon = BubbleArt.sprite(color: currentColor, diameter: d + 8, name: "cannon")
+        cannon = makeBubbleSprite(color: currentColor, diameter: d + 8, name: "cannon")
         shooter.addChild(cannon)
-        if let photo = profile?.photo {
-            cannon.texture = SKTexture(image: BubbleArt.render(color: BubbleArt.uiColor(currentColor), size: (d + 8) * UIScreen.main.scale, photo: photo))
-        }
-
-        nextDot = BubbleArt.sprite(color: nextColor, diameter: 20, name: "next")
+        refreshCannonSkin()
+        mountBarrel()
+        nextDot = makeBubbleSprite(color: nextColor, diameter: 20, name: "next")
         nextDot.position = CGPoint(x: 46, y: -8)
         shooter.addChild(nextDot)
+        setLoadedBadge(nil)
 
         trajectory.lineWidth = 3
         trajectory.glowWidth = 5
@@ -109,9 +110,102 @@ final class GameScene: SKScene {
                 _ = board.spawn(col: col, row: row, color: color)
             }
         }
+        plantPickups(rows: rows, colors: palette)
     }
 
-    func loadPower(_ p: PowerUp) { powers.toggle(p) }
+    private func plantPickups(rows: Int, colors: [BubbleColor]) {
+        let kinds: [PowerUp] = [.bomb, .fire, .face]
+        let n = min(3, 1 + wave / 3)
+        var placed = 0
+        var guardCount = 0
+        while placed < n, guardCount < 40 {
+            guardCount += 1
+            let row = Int(rng.next() % UInt64(max(1, rows)))
+            let col = Int(rng.next() % UInt64(HexGrid.colCount(row)))
+            guard let b = board.get(col: col, row: row), b.pickup == nil else { continue }
+            _ = board.remove(col: col, row: row)
+            let kind = kinds[Int(rng.next() % 3)]
+            _ = board.spawn(col: col, row: row, color: b.color, pickup: kind)
+            placed += 1
+        }
+    }
+
+    private var zigzagShots = 0
+    private var mirrorAim = false
+
+    func loadPower(_ p: PowerUp) {
+        powers.toggle(p)
+        setLoadedBadge(powers.loaded)
+    }
+
+    func useBattle(_ p: BattlePower) {
+        switch p {
+        case .zigzag where powers.battle.zigzag > 0:
+            powers.battle.zigzag -= 1
+            zigzagShots = 3
+        case .mirror where powers.battle.mirror > 0:
+            powers.battle.mirror -= 1
+            mirrorAim = true
+        case .shuffle where powers.battle.shuffle > 0:
+            powers.battle.shuffle -= 1
+            for b in board.all() where b.pickup == nil {
+                let color = BubbleColor.allCases[Int(rng.next() % 6)]
+                _ = board.remove(col: b.col, row: b.row)
+                _ = board.spawn(col: b.col, row: b.row, color: color)
+            }
+            redrawBoard()
+        default:
+            break
+        }
+    }
+
+    func setLoadedBadge(_ power: PowerUp?) {
+        shooter?.childNode(withName: "powerBadge")?.removeFromParent()
+        guard let power, let shooter else { return }
+        let label = SKLabelNode(text: power == .bomb ? "💣" : power == .fire ? "🔥" : "🙂")
+        label.name = "powerBadge"
+        label.fontSize = 22
+        label.verticalAlignmentMode = .center
+        label.horizontalAlignmentMode = .center
+        label.position = CGPoint(x: 0, y: 18)
+        label.zPosition = 12
+        shooter.addChild(label)
+    }
+
+    private func makeBubbleSprite(color: BubbleColor, diameter: CGFloat, name: String) -> SKSpriteNode {
+        BubbleArt.sprite(
+            color: color,
+            diameter: diameter,
+            name: name,
+            palette: profile?.palette ?? .classic,
+            style: profile?.style ?? .solid
+        )
+    }
+
+    private func refreshCannonSkin() {
+        let d = HexGrid.diameter
+        let pal = profile?.palette ?? .classic
+        let st = profile?.style ?? .solid
+        if let photo = profile?.photo {
+            cannon.texture = SKTexture(image: BubbleArt.render(
+                color: pal.uiColor(currentColor),
+                size: (d + 8) * UIScreen.main.scale,
+                photo: photo,
+                style: st
+            ))
+        } else {
+            cannon.texture = BubbleArt.texture(for: currentColor, diameter: (d + 8) * UIScreen.main.scale, palette: pal, style: st)
+        }
+    }
+
+    private func mountBarrel() {
+        shooter.childNode(withName: "barrel")?.removeFromParent()
+        let kind = profile?.shooter ?? .cannon
+        let barrel = BubbleArt.shooterNode(kind: kind, color: SKColor(cgColor: (profile?.palette ?? .classic).uiColor(currentColor).cgColor))
+        barrel.zPosition = -1
+        barrel.position = CGPoint(x: 0, y: -8)
+        shooter.addChild(barrel)
+    }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard flying == nil, !pausedGame, !won, !lost, let t = touches.first else { return }
@@ -231,24 +325,37 @@ final class GameScene: SKScene {
     private func fire() {
         guard flying == nil, !pausedGame, !won, !lost else { return }
         if mode != .arcade, shotsLeft <= 0 { return }
+        var shootAngle = aimAngle
+        if mirrorAim {
+            shootAngle = .pi - shootAngle
+            mirrorAim = false
+        }
         let power = powers.consume()
-        let node = BubbleArt.sprite(color: currentColor, diameter: HexGrid.diameter, name: "shot")
+        let node = makeBubbleSprite(color: currentColor, diameter: HexGrid.diameter, name: "shot")
         node.position = CGPoint(x: shooter.position.x, y: shooter.position.y + 26)
         node.zPosition = 9
         node.userData = [
-            "vx": NSNumber(value: Double(cos(aimAngle) * 780)),
-            "vy": NSNumber(value: Double(sin(aimAngle) * 780)),
+            "vx": NSNumber(value: Double(cos(shootAngle) * 780)),
+            "vy": NSNumber(value: Double(sin(shootAngle) * 780)),
+            "zigzag": NSNumber(value: zigzagShots > 0),
             "color": currentColor.rawValue,
             "power": power?.rawValue ?? "",
         ]
         addChild(node)
         flying = node
+        if zigzagShots > 0 { zigzagShots -= 1 }
         if mode != .arcade { shotsLeft -= 1 }
         Haptics.shoot()
         currentColor = nextColor
         nextColor = BubbleColor.allCases[Int(rng.next() % 6)]
-        cannon.texture = BubbleArt.texture(for: currentColor, diameter: (HexGrid.diameter + 8) * UIScreen.main.scale)
-        nextDot.texture = BubbleArt.texture(for: nextColor, diameter: 20 * UIScreen.main.scale)
+        refreshCannonSkin()
+        nextDot.texture = BubbleArt.texture(
+            for: nextColor,
+            diameter: 20 * UIScreen.main.scale,
+            palette: profile?.palette ?? .classic,
+            style: profile?.style ?? .solid
+        )
+        setLoadedBadge(nil)
         onHud?(score, shotsLeft, dropIn)
     }
 
@@ -264,6 +371,9 @@ final class GameScene: SKScene {
             let hunk = (speed / 60) / CGFloat(n)
             shot.position.x += (vx / speed) * hunk
             shot.position.y += (vy / speed) * hunk
+            if (shot.userData?["zigzag"] as? NSNumber)?.boolValue == true {
+                shot.position.x += sin(shot.position.y / 14) * 2.2
+            }
             if shot.position.x < wall {
                 shot.userData?["vx"] = NSNumber(value: Double(abs(vx)))
                 shot.position.x = wall
@@ -274,7 +384,11 @@ final class GameScene: SKScene {
             let power = shot.userData?["power"] as? String ?? ""
             if power == "fire" {
                 if let hit = bubble(at: shot.position) {
-                    pop([hit], kind: .fire)
+                    if let kind = hit.pickup {
+                        collectPickup(hit, kind: kind)
+                    } else {
+                        pop([hit], kind: .fire)
+                    }
                 }
                 if shot.position.y > size.height - 40 {
                     shot.removeFromParent()
@@ -299,6 +413,12 @@ final class GameScene: SKScene {
         flying = nil
         let color = BubbleColor(rawValue: shot.userData?["color"] as? String ?? "red") ?? .red
         let power = shot.userData?["power"] as? String ?? ""
+        if let hit, let kind = hit.pickup {
+            collectPickup(hit, kind: kind)
+            finishShot()
+            checkLose()
+            return
+        }
         guard let cell = nearestEmptyCell(hit: hit, near: pos) else {
             finishShot()
             return
@@ -361,10 +481,15 @@ final class GameScene: SKScene {
         case .fire: Haptics.fire()
         case .face: Haptics.face()
         }
+        let pickups = bubbles.filter { $0.pickup != nil }
+        let rest = bubbles.filter { $0.pickup == nil }
+        for p in pickups {
+            if let kind = p.pickup { collectPickup(p, kind: kind) }
+        }
         let mul = mode == .arcade ? wave : 1
-        score += bubbles.count * 10 * mul
-        burst(at: bubbles)
-        for b in bubbles { _ = board.remove(col: b.col, row: b.row) }
+        score += rest.count * 10 * mul
+        burst(at: rest)
+        for b in rest { _ = board.remove(col: b.col, row: b.row) }
         let dropped = board.floating()
         if !dropped.isEmpty {
             Haptics.drop()
@@ -380,8 +505,11 @@ final class GameScene: SKScene {
                 seedBoard(wave: wave)
                 dropIn = max(3, 6 - wave)
                 skipNextDrop = true
+                score += 80 * wave
+                bubblesAward(8)
                 redrawBoard()
                 Haptics.win()
+                onWave?(wave, score)
             } else {
                 won = true
                 Haptics.win()
@@ -436,12 +564,55 @@ final class GameScene: SKScene {
         }
     }
 
+    private func collectPickup(_ b: GridBubble, kind: PowerUp) {
+        _ = board.remove(col: b.col, row: b.row)
+        switch kind {
+        case .bomb: powers.inventory.bombs += 1
+        case .fire: powers.inventory.fireballs += 1
+        case .face: powers.inventory.faceBalls += 1
+        }
+        let fly = makeBubbleSprite(color: b.color, diameter: HexGrid.diameter - 1, name: "fly")
+        fly.position = position(of: b)
+        addChild(fly)
+        let badge = SKLabelNode(text: kind == .bomb ? "💣" : kind == .fire ? "🔥" : "🙂")
+        badge.fontSize = 16
+        badge.verticalAlignmentMode = .center
+        fly.addChild(badge)
+        let dest = CGPoint(x: size.width / 2, y: 70)
+        fly.run(.sequence([
+            .group([
+                .move(to: dest, duration: 0.45),
+                .scale(to: 0.4, duration: 0.45),
+            ]),
+            .fadeOut(withDuration: 0.12),
+            .removeFromParent(),
+        ]))
+        Haptics.win()
+        onPickup?(kind)
+        redrawBoard()
+    }
+
+    private func bubblesAward(_ n: Int) {
+        profile?.addBubbles(n)
+    }
+
     private func redrawBoard() {
         enumerateChildNodes(withName: "cell") { n, _ in n.removeFromParent() }
+        enumerateChildNodes(withName: "pickupMark") { n, _ in n.removeFromParent() }
         for b in board.all() {
-            let node = BubbleArt.sprite(color: b.color, diameter: HexGrid.diameter - 1)
+            let node = makeBubbleSprite(color: b.color, diameter: HexGrid.diameter - 1, name: "cell")
             node.position = position(of: b)
             addChild(node)
+            if let kind = b.pickup {
+                let mark = SKLabelNode(text: kind == .bomb ? "💣" : kind == .fire ? "🔥" : "🙂")
+                mark.fontSize = 14
+                mark.verticalAlignmentMode = .center
+                mark.horizontalAlignmentMode = .center
+                mark.position = node.position
+                mark.zPosition = 4
+                mark.name = "pickupMark"
+                addChild(mark)
+            }
         }
     }
 
@@ -529,15 +700,21 @@ final class GameScene: SKScene {
     }
 
     private func addBackdrop() {
-        if let img = UIImage(named: "Twilight") {
+        let bgId = profile?.background ?? .twilight
+        if bgId == .twilight, let img = UIImage(named: "Twilight") {
             let bg = SKSpriteNode(texture: SKTexture(image: img))
             bg.size = size
             bg.position = CGPoint(x: size.width / 2, y: size.height / 2)
             bg.zPosition = -20
             bg.alpha = 0.55
             addChild(bg)
+        } else {
+            let top = SKSpriteNode(color: SKColor(cgColor: bgId.top.cgColor), size: size)
+            top.position = CGPoint(x: size.width / 2, y: size.height / 2)
+            top.zPosition = -20
+            addChild(top)
         }
-        let dim = SKSpriteNode(color: SKColor(red: 0.03, green: 0.04, blue: 0.08, alpha: 0.45), size: size)
+        let dim = SKSpriteNode(color: SKColor(cgColor: bgId.bottom.withAlphaComponent(0.45).cgColor), size: size)
         dim.position = CGPoint(x: size.width / 2, y: size.height / 2)
         dim.zPosition = -19
         addChild(dim)

@@ -21,6 +21,11 @@
 		AA0100000000000000000012 /* LevelsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000012 /* LevelsCatalog.swift */; };
 		AA0100000000000000000013 /* BubbleArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000013 /* BubbleArt.swift */; };
 		AA0100000000000000000014 /* HubScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000014 /* HubScreens.swift */; };
+		AA0100000000000000000015 /* Cosmetics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000015 /* Cosmetics.swift */; };
+		AA0100000000000000000016 /* ShopStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000016 /* ShopStore.swift */; };
+		AA0100000000000000000017 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000017 /* NotificationManager.swift */; };
+		AA0100000000000000000018 /* CustomizeHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000018 /* CustomizeHub.swift */; };
+		AA0100000000000000000019 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000019 /* StoreKit.framework */; };
 		AA010000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000A /* Assets.xcassets */; };
 		AA010000000000000000000B /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000B /* SpriteKit.framework */; };
 		AA010000000000000000000C /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA020000000000000000000C /* UserNotifications.framework */; };
@@ -41,6 +46,11 @@
 		AA0200000000000000000012 /* LevelsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelsCatalog.swift; sourceTree = "<group>"; };
 		AA0200000000000000000013 /* BubbleArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleArt.swift; sourceTree = "<group>"; };
 		AA0200000000000000000014 /* HubScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HubScreens.swift; sourceTree = "<group>"; };
+		AA0200000000000000000015 /* Cosmetics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cosmetics.swift; sourceTree = "<group>"; };
+		AA0200000000000000000016 /* ShopStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopStore.swift; sourceTree = "<group>"; };
+		AA0200000000000000000017 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		AA0200000000000000000018 /* CustomizeHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomizeHub.swift; sourceTree = "<group>"; };
+		AA0200000000000000000019 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		AA020000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA020000000000000000000B /* SpriteKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SpriteKit.framework; path = System/Library/Frameworks/SpriteKit.framework; sourceTree = SDKROOT; };
 		AA020000000000000000000C /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
@@ -55,6 +65,7 @@
 			files = (
 				AA010000000000000000000B /* SpriteKit.framework in Frameworks */,
 				AA010000000000000000000C /* UserNotifications.framework in Frameworks */,
+				AA0100000000000000000019 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -87,6 +98,10 @@
 				AA0200000000000000000012 /* LevelsCatalog.swift */,
 				AA0200000000000000000013 /* BubbleArt.swift */,
 				AA0200000000000000000014 /* HubScreens.swift */,
+				AA0200000000000000000015 /* Cosmetics.swift */,
+				AA0200000000000000000016 /* ShopStore.swift */,
+				AA0200000000000000000017 /* NotificationManager.swift */,
+				AA0200000000000000000018 /* CustomizeHub.swift */,
 				AA020000000000000000000A /* Assets.xcassets */,
 				AA020000000000000000000D /* Info.plist */,
 			);
@@ -98,6 +113,7 @@
 			children = (
 				AA020000000000000000000B /* SpriteKit.framework */,
 				AA020000000000000000000C /* UserNotifications.framework */,
+				AA0200000000000000000019 /* StoreKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -193,6 +209,10 @@
 				AA0100000000000000000012 /* LevelsCatalog.swift in Sources */,
 				AA0100000000000000000013 /* BubbleArt.swift in Sources */,
 				AA0100000000000000000014 /* HubScreens.swift in Sources */,
+				AA0100000000000000000015 /* Cosmetics.swift in Sources */,
+				AA0100000000000000000016 /* ShopStore.swift in Sources */,
+				AA0100000000000000000017 /* NotificationManager.swift in Sources */,
+				AA0100000000000000000018 /* CustomizeHub.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -26,6 +26,20 @@ enum ArcadeWeek {
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
+    static func dayId(from now: Date = .now) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let c = cal.dateComponents([.year, .month, .day], from: now)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+
+    static func yesterdayId(from now: Date = .now) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let y = cal.date(byAdding: .day, value: -1, to: now) ?? now
+        return dayId(from: y)
+    }
+
     static func seed(from now: Date = .now) -> Int {
         var hash = 2166136261
         for b in weekId(from: now).utf8 {

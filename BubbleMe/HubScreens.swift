@@ -196,6 +196,11 @@ struct ProfileHub: View {
                     .clipShape(Circle())
                     .overlay(Circle().stroke(.white.opacity(0.35), lineWidth: 2))
                 }
+                if profile.photo != nil {
+                    Button("Remove photo") { profile.clearPhoto() }
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.accent)
+                }
                 TextField("Display name", text: $profile.username)
                     .font(.display(22))
                     .multilineTextAlignment(.center)
@@ -206,7 +211,7 @@ struct ProfileHub: View {
                 HStack {
                     stat("\(profile.wins)", "Wins")
                     stat("\(profile.losses)", "Losses")
-                    stat("\(profile.coins)", "Coins")
+                    stat("\(profile.bubbles)", "Bubbles")
                 }
                 ShareLink(item: FriendsManager(friendCode: profile.friendCode).inviteText) {
                     Text("Invite a player")
@@ -240,8 +245,20 @@ struct SettingsSheet: View {
         NavigationStack {
             Form {
                 Section("Shooter") {
-                    Text("Tap the circle on Home to change your photo. It skins the launcher and Face Ball.")
+                    Text("Tap the circle on Home to change your photo. Remove it on the Me tab to reset to default.")
                         .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if profile.photo != nil {
+                        Button("Remove photo") { profile.clearPhoto() }
+                    }
+                }
+                Section("Alerts") {
+                    Toggle("Streak, board, friends, battles", isOn: Binding(
+                        get: { profile.alertsEnabled },
+                        set: { profile.setAlerts($0) }
+                    ))
+                    Text("Streak warning at 8pm CT. Friend / battle / leaderboard alerts fire as local notifications (remote push needs a paid Apple account).")
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 Section("Feel") {

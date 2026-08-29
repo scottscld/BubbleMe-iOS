@@ -11,6 +11,7 @@ struct GridBubble: Identifiable, Codable {
     var row: Int
     var color: BubbleColor
     var face: Bool
+    var pickup: PowerUp? = nil
 }
 
 enum HexGrid {
@@ -48,9 +49,9 @@ final class Board {
     }
 
     @discardableResult
-    func spawn(col: Int, row: Int, color: BubbleColor, face: Bool = false) -> GridBubble? {
+    func spawn(col: Int, row: Int, color: BubbleColor, face: Bool = false, pickup: PowerUp? = nil) -> GridBubble? {
         guard inBounds(col: col, row: row), cells[row][col] == nil else { return nil }
-        let b = GridBubble(id: nextId, col: col, row: row, color: color, face: face)
+        let b = GridBubble(id: nextId, col: col, row: row, color: color, face: face, pickup: pickup)
         nextId += 1
         cells[row][col] = b
         return b
@@ -101,7 +102,7 @@ final class Board {
         var out: [GridBubble] = []
         var stack = [(col, row)]
         while let (c, r) = stack.popLast() {
-            guard let b = get(col: c, row: r), b.color == start.color, !seen.contains(b.id) else { continue }
+            guard let b = get(col: c, row: r), b.pickup == nil, start.pickup == nil, b.color == start.color, !seen.contains(b.id) else { continue }
             seen.insert(b.id)
             out.append(b)
             stack.append(contentsOf: HexGrid.neighbors(col: c, row: r))

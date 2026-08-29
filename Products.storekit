@@ -1,0 +1,17 @@
+{
+  "identifier" : "BubbleMeStore",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    { "displayPrice" : "0.99", "familyShareable" : false, "internalID" : "B250", "localizations" : [{ "description" : "250 Bubbles", "displayName" : "Pocket of Bubbles", "locale" : "en_US" }], "productID" : "fun.bubbleme.bubbles.250", "referenceName" : "Pocket", "type" : "Consumable" },
+    { "displayPrice" : "2.99", "familyShareable" : false, "internalID" : "B800", "localizations" : [{ "description" : "800 Bubbles", "displayName" : "Pouch of Bubbles", "locale" : "en_US" }], "productID" : "fun.bubbleme.bubbles.800", "referenceName" : "Pouch", "type" : "Consumable" },
+    { "displayPrice" : "4.99", "familyShareable" : false, "internalID" : "B2000", "localizations" : [{ "description" : "2000 Bubbles", "displayName" : "Bucket of Bubbles", "locale" : "en_US" }], "productID" : "fun.bubbleme.bubbles.2000", "referenceName" : "Bucket", "type" : "Consumable" },
+    { "displayPrice" : "9.99", "familyShareable" : false, "internalID" : "B5000", "localizations" : [{ "description" : "5000 Bubbles", "displayName" : "Chest of Bubbles", "locale" : "en_US" }], "productID" : "fun.bubbleme.bubbles.5000", "referenceName" : "Chest", "type" : "Consumable" },
+    { "displayPrice" : "19.99", "familyShareable" : false, "internalID" : "B12000", "localizations" : [{ "description" : "12000 Bubbles", "displayName" : "Vault of Bubbles", "locale" : "en_US" }], "productID" : "fun.bubbleme.bubbles.12000", "referenceName" : "Vault", "type" : "Consumable" }
+  ],
+  "settings" : { "_failTransactionsEnabled" : false, "_storeKitErrors" : [] },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
